@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { connectDocumentDB } from '@/server/db/documentdb';
-import { Pod, CreatePodRequest, PodResponse } from '@/lib/types/pod';
-
-// In-memory store for development when DocumentDB is unavailable
-let inMemoryPods: Pod[] = [];
+import { requireAurora } from '@/lib/db/require-aurora';
+import {
+  createPod,
+  listPodsForUser,
+} from '@/lib/db/pod-repository';
+import type { CreatePodRequest, PodResponse } from '@/lib/types/pod';
 
 export async function GET() {
   try {
@@ -13,38 +14,13 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    let pods: Pod[] = [];
-
-    try {
-      // Try to connect to DocumentDB
-      const db = await connectDocumentDB();
-      if (!db) {
-        throw new Error('Database connection failed');
-      }
-      const podsCollection = db.connection.db?.collection('pods');
-      if (!podsCollection) {
-        throw new Error('Database collection not available');
-      }
-      
-      // Find pods where user is owner or member
-      pods = await podsCollection.find({
-        $or: [
-          { ownerId: userId },
-          { memberIds: userId }
-        ]
-      }).toArray() as unknown as Pod[];
-    } catch (error) {
-      console.warn('DocumentDB unavailable, using in-memory store:', error);
-      // Fallback to in-memory store
-      pods = inMemoryPods.filter(pod => 
-        pod.ownerId === userId || pod.memberIds.includes(userId)
-      );
-    }
-
+    requireAurora('Pods');
+    const pods = await listPodsForUser(userId);
     return NextResponse.json({ success: true, pods } as PodResponse);
   } catch (error) {
     console.error('Error fetching pods:', error);
-    return NextResponse.json({ error: 'Failed to fetch pods' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Failed to fetch pods';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -55,58 +31,47 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body: any = await request.json();
+    requireAurora('Pods');
+
+    const body = (await request.json()) as CreatePodRequest & {
+      videos?: string[];
+      skills?: string[];
+      rewards?: string[];
+      resources?: string[];
+    };
     const { title, description, settings, metadata, videos, skills, rewards, resources } = body;
 
     if (!title || title.trim().length === 0) {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 });
     }
 
-    const newPod: Pod = {
-      id: `pod_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    const pod = await createPod({
+      id: `pod_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
       title: title.trim(),
       description: description?.trim(),
       ownerId: userId,
-      memberIds: [userId], // Owner is automatically a member
+      memberIds: [userId],
       videos: videos || [],
       skills: skills || [],
       rewards: rewards || [],
       resources: resources || [],
-      createdAt: new Date(),
-      updatedAt: new Date(),
-        settings: {
-          isPublic: settings?.isPublic ?? false,
-          allowInvites: settings?.allowInvites ?? true,
-          maxMembers: settings?.maxMembers ?? 50,
-        },
+      settings: {
+        isPublic: settings?.isPublic ?? false,
+        allowInvites: settings?.allowInvites ?? true,
+        maxMembers: settings?.maxMembers ?? 50,
+      },
       metadata: {
         color: '#3b82f6',
         icon: 'users',
         tags: [],
-        ...metadata
-      }
-    };
+        ...metadata,
+      },
+    });
 
-    try {
-      // Try to save to DocumentDB
-      const db = await connectDocumentDB();
-      if (!db) {
-        throw new Error('Database connection failed');
-      }
-      const podsCollection = db.connection.db?.collection('pods');
-      if (!podsCollection) {
-        throw new Error('Database collection not available');
-      }
-      await podsCollection.insertOne(newPod);
-    } catch (error) {
-      console.warn('DocumentDB unavailable, using in-memory store:', error);
-      // Fallback to in-memory store
-      inMemoryPods.push(newPod);
-    }
-
-    return NextResponse.json({ success: true, pod: newPod } as PodResponse);
+    return NextResponse.json({ success: true, pod } as PodResponse);
   } catch (error) {
     console.error('Error creating pod:', error);
-    return NextResponse.json({ error: 'Failed to create pod' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Failed to create pod';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

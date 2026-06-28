@@ -208,3 +208,148 @@ export const courseEnrollments = pgTable("course_enrollments", {
   enrolledAt: timestamp("enrolled_at").defaultNow().notNull(),
   completedAt: timestamp("completed_at"),
 });
+
+export const pods = pgTable("pods", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  externalId: varchar("external_id", { length: 100 }).notNull().unique(),
+  ownerClerkId: varchar("owner_clerk_id", { length: 255 }).notNull(),
+  title: varchar("title", { length: 500 }).notNull(),
+  description: text("description"),
+  settings: jsonb("settings").$type<{
+    isPublic: boolean;
+    allowInvites: boolean;
+    maxMembers?: number;
+  }>().default({ isPublic: false, allowInvites: true, maxMembers: 50 }),
+  metadata: jsonb("metadata").$type<{
+    color?: string;
+    icon?: string;
+    tags?: string[];
+  }>().default({}),
+  videos: jsonb("videos").$type<string[]>().default([]),
+  skills: jsonb("skills").$type<string[]>().default([]),
+  resources: jsonb("resources").$type<string[]>().default([]),
+  rewards: jsonb("rewards").$type<string[]>().default([]),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const podMembers = pgTable("pod_members", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  podId: uuid("pod_id")
+    .references(() => pods.id, { onDelete: "cascade" })
+    .notNull(),
+  clerkUserId: varchar("clerk_user_id", { length: 255 }).notNull(),
+  role: varchar("role", { length: 20 }).notNull().default("member"),
+  permissions: jsonb("permissions").$type<{
+    canInvite?: boolean;
+    canManageResources?: boolean;
+    canCreateThreads?: boolean;
+  }>().default({}),
+  joinedAt: timestamp("joined_at").defaultNow().notNull(),
+});
+
+export const podInvites = pgTable("pod_invites", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  podId: uuid("pod_id")
+    .references(() => pods.id, { onDelete: "cascade" })
+    .notNull(),
+  invitedByClerkId: varchar("invited_by_clerk_id", { length: 255 }).notNull(),
+  invitedEmail: varchar("invited_email", { length: 255 }),
+  invitedClerkId: varchar("invited_clerk_id", { length: 255 }),
+  token: varchar("token", { length: 64 }).notNull().unique(),
+  status: varchar("status", { length: 20 }).notNull().default("pending"),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const podShares = pgTable("pod_shares", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  shareId: varchar("share_id", { length: 100 }).notNull().unique(),
+  podId: uuid("pod_id")
+    .references(() => pods.id, { onDelete: "cascade" })
+    .notNull(),
+  ownerClerkId: varchar("owner_clerk_id", { length: 255 }),
+  access: varchar("access", { length: 20 }).notNull().default("public"),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const shareLinks = pgTable("share_links", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  shareId: varchar("share_id", { length: 100 }).notNull().unique(),
+  tenantId: varchar("tenant_id", { length: 255 }),
+  ownerClerkId: varchar("owner_clerk_id", { length: 255 }).notNull(),
+  externalVideoId: varchar("external_video_id", { length: 255 }).notNull(),
+  type: varchar("type", { length: 30 }).notNull().default("response"),
+  content: text("content").notNull(),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const userXp = pgTable("user_xp", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  clerkUserId: varchar("clerk_user_id", { length: 255 }).notNull().unique(),
+  totalXp: integer("total_xp").notNull().default(0),
+  level: integer("level").notNull().default(1),
+  currentLevelXp: integer("current_level_xp").notNull().default(0),
+  nextLevelXp: integer("next_level_xp").notNull().default(100),
+  badges: jsonb("badges").$type<string[]>().default([]),
+  achievements: jsonb("achievements").$type<string[]>().default([]),
+  streak: integer("streak").notNull().default(0),
+  lastActivity: timestamp("last_activity").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const xpActivities = pgTable("xp_activities", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  clerkUserId: varchar("clerk_user_id", { length: 255 }).notNull(),
+  action: varchar("action", { length: 50 }).notNull(),
+  xpEarned: integer("xp_earned").notNull(),
+  externalVideoId: varchar("external_video_id", { length: 255 }),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const chatSessions = pgTable("chat_sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  clerkUserId: varchar("clerk_user_id", { length: 255 }).notNull(),
+  externalVideoId: varchar("external_video_id", { length: 255 }).notNull(),
+  sessionId: varchar("session_id", { length: 100 }).notNull(),
+  messages: jsonb("messages").$type<
+    Array<{
+      id: string;
+      type: "user" | "ai";
+      content: string;
+      timestamp?: string;
+      metadata?: Record<string, unknown>;
+    }>
+  >().default([]),
+  videoMetadata: jsonb("video_metadata").$type<Record<string, unknown>>().default({}),
+  isActive: boolean("is_active").notNull().default(true),
+  lastActivity: timestamp("last_activity").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const videoQuizzes = pgTable("video_quizzes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  externalVideoId: varchar("external_video_id", { length: 255 }).notNull(),
+  ownerClerkId: varchar("owner_clerk_id", { length: 255 }).notNull(),
+  questions: jsonb("questions").$type<
+    Array<{
+      question: string;
+      options: Array<{ letter: string; text: string }>;
+      correct: string;
+    }>
+  >().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const videoFlashcards = pgTable("video_flashcards", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  externalVideoId: varchar("external_video_id", { length: 255 }).notNull(),
+  ownerClerkId: varchar("owner_clerk_id", { length: 255 }).notNull(),
+  cards: jsonb("cards").$type<Array<{ front: string; back: string }>>().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});

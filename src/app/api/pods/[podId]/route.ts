@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { connectDocumentDB } from '@/server/db/documentdb';
-import { Pod, UpdatePodRequest, PodResponse } from '@/lib/types/pod';
-
-// In-memory store for development when DocumentDB is unavailable
-let inMemoryPods: Pod[] = [];
+import { requireAurora } from '@/lib/db/require-aurora';
+import {
+  deletePod,
+  findPodByExternalId,
+  isPodMember,
+  updatePod,
+} from '@/lib/db/pod-repository';
+import type { PodResponse, UpdatePodRequest } from '@/lib/types/pod';
 
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ podId: string }> }
 ) {
   try {
@@ -16,31 +19,14 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    requireAurora('Pods');
     const { podId } = await params;
-    let pod: Pod | null = null;
-
-    try {
-      // Try to connect to DocumentDB
-      const db = await connectDocumentDB();
-      if (!db) {
-        throw new Error('Database connection failed');
-      }
-      const podsCollection = db.connection.db?.collection('pods');
-      if (!podsCollection) {
-        throw new Error('Database collection not available');
-      }
-      pod = await podsCollection.findOne({ id: podId }) as Pod | null;
-    } catch (error) {
-      console.warn('DocumentDB unavailable, using in-memory store:', error);
-      // Fallback to in-memory store
-      pod = inMemoryPods.find(p => p.id === podId) || null;
-    }
+    const pod = await findPodByExternalId(podId);
 
     if (!pod) {
       return NextResponse.json({ error: 'Pod not found' }, { status: 404 });
     }
 
-    // Check if user has access to this pod
     if (pod.ownerId !== userId && !pod.memberIds.includes(userId)) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
@@ -62,40 +48,20 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    requireAurora('Pods');
     const { podId } = await params;
     const body: UpdatePodRequest = await request.json();
-
-    let pod: Pod | null = null;
-
-    try {
-      // Try to connect to DocumentDB
-      const db = await connectDocumentDB();
-      if (!db) {
-        throw new Error('Database connection failed');
-      }
-      const podsCollection = db.connection.db?.collection('pods');
-      if (!podsCollection) {
-        throw new Error('Database collection not available');
-      }
-      pod = await podsCollection.findOne({ id: podId }) as Pod | null;
-    } catch (error) {
-      console.warn('DocumentDB unavailable, using in-memory store:', error);
-      // Fallback to in-memory store
-      pod = inMemoryPods.find(p => p.id === podId) || null;
-    }
+    const pod = await findPodByExternalId(podId);
 
     if (!pod) {
       return NextResponse.json({ error: 'Pod not found' }, { status: 404 });
     }
 
-    // Check if user is the owner
     if (pod.ownerId !== userId) {
       return NextResponse.json({ error: 'Only the owner can update this pod' }, { status: 403 });
     }
 
-    // Update pod
-    const updatedPod: Pod = {
-      ...pod,
+    const updatedPod = await updatePod(podId, {
       title: body.title?.trim() || pod.title,
       description: body.description?.trim() || pod.description,
       videos: body.videos !== undefined ? body.videos : pod.videos,
@@ -107,35 +73,8 @@ export async function PUT(
         allowInvites: body.settings?.allowInvites ?? pod.settings.allowInvites,
         maxMembers: body.settings?.maxMembers ?? pod.settings.maxMembers,
       },
-      metadata: {
-        ...pod.metadata,
-        ...body.metadata
-      },
-      updatedAt: new Date()
-    };
-
-    try {
-      // Try to save to DocumentDB
-      const db = await connectDocumentDB();
-      if (!db) {
-        throw new Error('Database connection failed');
-      }
-      const podsCollection = db.connection.db?.collection('pods');
-      if (!podsCollection) {
-        throw new Error('Database collection not available');
-      }
-      await podsCollection.updateOne(
-        { id: podId },
-        { $set: updatedPod }
-      );
-    } catch (error) {
-      console.warn('DocumentDB unavailable, using in-memory store:', error);
-      // Fallback to in-memory store
-      const index = inMemoryPods.findIndex(p => p.id === podId);
-      if (index !== -1) {
-        inMemoryPods[index] = updatedPod;
-      }
-    }
+      metadata: { ...pod.metadata, ...body.metadata },
+    });
 
     return NextResponse.json({ success: true, pod: updatedPod } as PodResponse);
   } catch (error) {
@@ -145,7 +84,7 @@ export async function PUT(
 }
 
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ podId: string }> }
 ) {
   try {
@@ -154,53 +93,19 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    requireAurora('Pods');
     const { podId } = await params;
-
-    let pod: Pod | null = null;
-
-    try {
-      // Try to connect to DocumentDB
-      const db = await connectDocumentDB();
-      if (!db) {
-        throw new Error('Database connection failed');
-      }
-      const podsCollection = db.connection.db?.collection('pods');
-      if (!podsCollection) {
-        throw new Error('Database collection not available');
-      }
-      pod = await podsCollection.findOne({ id: podId }) as Pod | null;
-    } catch (error) {
-      console.warn('DocumentDB unavailable, using in-memory store:', error);
-      // Fallback to in-memory store
-      pod = inMemoryPods.find(p => p.id === podId) || null;
-    }
+    const pod = await findPodByExternalId(podId);
 
     if (!pod) {
       return NextResponse.json({ error: 'Pod not found' }, { status: 404 });
     }
 
-    // Check if user is the owner
     if (pod.ownerId !== userId) {
       return NextResponse.json({ error: 'Only the owner can delete this pod' }, { status: 403 });
     }
 
-    try {
-      // Try to delete from DocumentDB
-      const db = await connectDocumentDB();
-      if (!db) {
-        throw new Error('Database connection failed');
-      }
-      const podsCollection = db.connection.db?.collection('pods');
-      if (!podsCollection) {
-        throw new Error('Database collection not available');
-      }
-      await podsCollection.deleteOne({ id: podId });
-    } catch (error) {
-      console.warn('DocumentDB unavailable, using in-memory store:', error);
-      // Fallback to in-memory store
-      inMemoryPods = inMemoryPods.filter(p => p.id !== podId);
-    }
-
+    await deletePod(podId);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting pod:', error);

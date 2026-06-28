@@ -6,6 +6,11 @@ import { recordLearningEvent } from '@/lib/db/learning-events';
 import Redis from 'ioredis'
 import crypto from 'crypto'
 import { BedrockRuntimeClient, InvokeModelWithResponseStreamCommand } from '@aws-sdk/client-bedrock-runtime';
+import {
+  createBedrockStreamCommand,
+  parseStreamChunk,
+  resolveChatModel,
+} from '@/lib/bedrock-invoke';
 import { DEMO_VIDEO_ID, DEMO_CACHED_RESPONSES, DEMO_TRANSCRIPT } from '@/data/demo-transcript';
 import { extractCodeFromTranscript, combineCodeSources } from '@/lib/code-extraction';
 import { ocrService } from '@/lib/ocr-service';
@@ -557,20 +562,8 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const command = new InvokeModelWithResponseStreamCommand({
-      modelId: 'anthropic.claude-3-haiku-20240307-v1:0',
-      body: JSON.stringify({
-        anthropic_version: 'bedrock-2023-05-31',
-        max_tokens: 500,
-        messages: [
-          {
-            role: 'user',
-            content: prompt
-          }
-        ]
-      }),
-      contentType: 'application/json'
-    });
+    const modelId = await resolveChatModel(authUser?.id, prompt.length);
+    const command = createBedrockStreamCommand(modelId, prompt);
 
     // Create a readable stream for the response
     const response = await bedrockClient.send(command);
@@ -587,15 +580,16 @@ export async function POST(request: NextRequest) {
             for await (const chunk of response.body) {
               if (chunk.chunk?.bytes) {
                 const data = JSON.parse(new TextDecoder().decode(chunk.chunk.bytes));
-
-                if (data.type === 'content_block_delta') {
-                  const text = data.delta?.text;
-                  if (text) {
-                    controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ text })}\n\n`));
-                  }
+                const text = parseStreamChunk(modelId, data);
+                if (text) {
+                  controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ text })}\n\n`));
                 }
 
-                if (data.type === 'message_stop') {
+                if (
+                  data.type === 'message_stop' ||
+                  data.messageStop ||
+                  data.type === 'contentBlockStop'
+                ) {
                   controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ done: true })}\n\n`));
                   controller.close();
                   break;
