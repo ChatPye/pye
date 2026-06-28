@@ -1,0 +1,32 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# next.js
+/.next/
+/out/
+/build
+/dist
+
+# env & secrets
+.env*
+!.env.example
+.aws-deploy-output.json
+.vercel
+/.clerk/
+
+# debug & misc
+.DS_Store
+*.pem
+npm-debug.log*
+*.tsbuildinfo
+next-env.d.ts
+
+# IDE
+.cursor/
+
+# test artifacts
+/coverage
+/test-results/
+/playwright-report/
