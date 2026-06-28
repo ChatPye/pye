@@ -14,7 +14,10 @@ export class AudioTranscriptionService {
     this.transcribeClient = new TranscribeClient({ region });
     this.s3Client = new S3Client({ region });
     
-    this.bucketName = process.env.AWS_S3_BUCKET || 'chatpye-audio-transcriptions';
+    this.bucketName =
+      process.env.AWS_S3_BUCKET ||
+      process.env.S3_BUCKET_NAME ||
+      'chatpye-uploads';
   }
 
   // Extract audio from YouTube video and transcribe
@@ -129,7 +132,57 @@ export class AudioTranscriptionService {
     }
   }
 
-  // Start AWS Transcribe job
+  // Start AWS Transcribe job (returns immediately)
+  async startJobForS3Key(videoId: string, s3Key: string): Promise<string> {
+    const jobId = `transcription-${videoId}-${Date.now()}`;
+    await this.startTranscriptionJob(jobId, s3Key);
+    return jobId;
+  }
+
+  /** Poll job status without blocking for long periods. */
+  async pollJob(jobId: string): Promise<{
+    status: 'pending' | 'complete' | 'failed';
+    segments?: Array<{ text: string; start: number; duration: number }>;
+    text?: string;
+    error?: string;
+    confidence?: number;
+  }> {
+    try {
+      const response = await this.transcribeClient.send(
+        new GetTranscriptionJobCommand({ TranscriptionJobName: jobId })
+      );
+      const job = response.TranscriptionJob;
+
+      if (job?.TranscriptionJobStatus === 'IN_PROGRESS' || job?.TranscriptionJobStatus === 'QUEUED') {
+        return { status: 'pending' };
+      }
+
+      if (job?.TranscriptionJobStatus === 'FAILED') {
+        return { status: 'failed', error: job.FailureReason || 'Transcription failed' };
+      }
+
+      if (job?.TranscriptionJobStatus === 'COMPLETED') {
+        const transcriptKey = `transcripts/${jobId}.json`;
+        const transcriptData = await this.getTranscriptFromS3(transcriptKey);
+        const text = transcriptData.results?.transcripts?.[0]?.transcript ?? '';
+        const segments = this.parseAwsTranscriptSegments(transcriptData);
+        return {
+          status: 'complete',
+          segments,
+          text,
+          confidence: this.calculateAverageConfidence(transcriptData.results?.items),
+        };
+      }
+
+      return { status: 'pending' };
+    } catch (error) {
+      return {
+        status: 'failed',
+        error: error instanceof Error ? error.message : 'Poll failed',
+      };
+    }
+  }
+
   private async startTranscriptionJob(jobId: string, s3Key: string): Promise<void> {
     try {
       const command = new StartTranscriptionJobCommand({

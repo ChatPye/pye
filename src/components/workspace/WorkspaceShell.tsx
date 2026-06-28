@@ -101,6 +101,9 @@ interface WorkspaceShellProps {
   source?: 'youtube' | 'upload'
   uploadedName?: string
   processingStatus?: 'queued' | 'pending' | 'extracting' | 'transcribing' | 'embedding' | 'complete' | 'failed'
+  processingProgress?: number
+  processingError?: string | null
+  onRetryProcessing?: () => void
   videoData?: {
     title: string
     channel: string
@@ -125,6 +128,7 @@ interface RecentItem {
   id: string
   title: string
   updated: string
+  source?: 'youtube' | 'upload'
 }
 
 interface SidebarPod {
@@ -272,6 +276,9 @@ export default function WorkspaceShell({
   source = 'youtube',
   uploadedName,
   processingStatus,
+  processingProgress = 0,
+  processingError,
+  onRetryProcessing,
   videoData,
   chapters = [],
   resources = [],
@@ -310,6 +317,7 @@ export default function WorkspaceShell({
   const [snipMode, setSnipMode] = useState(false)
   const [clipModalOpen, setClipModalOpen] = useState(false)
   const [videoDuration, setVideoDuration] = useState(0)
+  const [apiRecentVideos, setApiRecentVideos] = useState<RecentItem[]>([])
   const [chatSessionId] = useState(() => `session_${Date.now()}`)
   const chatSavedRef = useRef(false)
   
@@ -327,6 +335,34 @@ export default function WorkspaceShell({
       })
     }, 2000)
   }
+
+  // Load recent videos from Aurora for sidebar persistence
+  useEffect(() => {
+    if (!isSignedIn) return
+    let ignore = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/user/videos?limit=15', { credentials: 'include' })
+        if (!res.ok || ignore) return
+        const data = await res.json()
+        if (data.success && Array.isArray(data.videos)) {
+          setApiRecentVideos(
+            data.videos.map((v: { id: string; title: string; updated: string; source?: string }) => ({
+              id: v.id,
+              title: v.title,
+              updated: v.updated,
+              source: v.source === 'upload' ? 'upload' : 'youtube',
+            }))
+          )
+        }
+      } catch {
+        /* ignore */
+      }
+    })()
+    return () => {
+      ignore = true
+    }
+  }, [isSignedIn, videoId, processingStatus])
 
   // Load chat history on mount
   useEffect(() => {
@@ -574,7 +610,9 @@ export default function WorkspaceShell({
       }
     })
 
-    const recentVideos = extractRecentVideosFromMetadata(user?.publicMetadata?.recentVideos)
+    const recentVideos = apiRecentVideos.length
+      ? apiRecentVideos
+      : extractRecentVideosFromMetadata(user?.publicMetadata?.recentVideos)
 
     const menu: SidebarMenuItem[] = [
       {
@@ -611,7 +649,7 @@ export default function WorkspaceShell({
     ]
 
     return { joinedPods: joined, ownedPods: owned, recentVideos, menu }
-  }, [user?.publicMetadata, router])
+  }, [user?.publicMetadata, router, apiRecentVideos])
 
   const userDisplayName = user?.firstName ? `${user.firstName}${user.lastName ? ` ${user.lastName}` : ''}` : user?.username || 'Workspace member'
   const subscriptionTier = (user?.publicMetadata?.subscription as string | undefined) ?? 'freemium'
@@ -1233,6 +1271,15 @@ export default function WorkspaceShell({
                       />
                     </div>
 
+                    {(processingError || !isProcessed) && (
+                      <ProcessingBanner
+                        status={processingStatus}
+                        progress={processingProgress}
+                        error={processingError}
+                        onRetry={onRetryProcessing}
+                      />
+                    )}
+
                     {/* Action Bar */}
                     {actionToast && (
                       <div className="mb-2 text-xs text-rose-300">{actionToast}</div>
@@ -1280,6 +1327,8 @@ export default function WorkspaceShell({
                       onIntelligentQuery={handleIntelligentQuery}
                       onSeekToTime={seekToTime}
                       processingStatus={processingStatus}
+                      processingProgress={processingProgress}
+                      processingError={processingError}
                       resources={displayResources}
                       onResourceClick={handleResourceClick}
                       showLanding={false}
@@ -1297,9 +1346,7 @@ export default function WorkspaceShell({
                     <ChapterCarousel
                       chapters={isProcessed ? chapters : []}
                       currentTime={currentTime}
-                      onSelectChapter={(startTime) => {
-                        console.log('Navigate to chapter:', startTime)
-                      }}
+                      onSelectChapter={seekToTime}
                     />
 
                     {isProcessed && (videoData || aiMeta || oembedMeta) && (
@@ -1361,6 +1408,15 @@ export default function WorkspaceShell({
                           onSeek={seekToTime}
                         />
                       </div>
+
+                      {(processingError || !isProcessed) && (
+                        <ProcessingBanner
+                          status={processingStatus}
+                          progress={processingProgress}
+                          error={processingError}
+                          onRetry={onRetryProcessing}
+                        />
+                      )}
 
                       {actionToast && (
                         <div className="mb-2 text-xs text-rose-300">{actionToast}</div>
@@ -1450,6 +1506,8 @@ export default function WorkspaceShell({
                       onIntelligentQuery={handleIntelligentQuery}
                       onSeekToTime={seekToTime}
                       processingStatus={processingStatus}
+                      processingProgress={processingProgress}
+                      processingError={processingError}
                       resources={isProcessed ? displayResources : []}
                       onResourceClick={handleResourceClick}
                       showLanding={false}
@@ -1631,8 +1689,9 @@ function WorkspaceSidebar({
             )
           ) : (
             recentVideosMemo.map((item) => (
-              <button
+              <Link
                 key={item.id}
+                href={`/workspace/${encodeURIComponent(item.id)}?source=${item.source === 'upload' ? 'upload' : 'youtube'}`}
                 className={cx(
                   'flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3 text-left text-sm text-white/70 transition hover:border-white/25 hover:text-white',
                   collapsed && 'justify-center px-0'
@@ -1647,7 +1706,7 @@ function WorkspaceSidebar({
                     <p className="text-xs text-white/40">{item.updated}</p>
                   </div>
                 )}
-              </button>
+              </Link>
             ))
           )}
           {!collapsed && state.recentVideos.length > 15 && (
@@ -1749,6 +1808,8 @@ function WorkspaceLanding({
   const [isFileAttached, setIsFileAttached] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadStage, setUploadStage] = useState('')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const isValidUrl = composerValue.trim().length > 0
 
@@ -1768,10 +1829,17 @@ function WorkspaceLanding({
     if (selectedFile) {
       setIsUploading(true)
       setUploadError('')
+      setUploadProgress(0)
       try {
         const result = await uploadVideoFile(
           selectedFile,
-          selectedFile.name.replace(/\.[^/.]+$/, '')
+          selectedFile.name.replace(/\.[^/.]+$/, ''),
+          (pct, stage) => {
+            setUploadProgress(pct)
+            setUploadStage(
+              stage === 'uploading' ? 'Uploading to secure storage…' : 'Finalizing upload…'
+            )
+          }
         )
 
         if (!result.success || !result.videoId) {
@@ -1864,6 +1932,18 @@ function WorkspaceLanding({
           </div>
           {uploadError && (
             <p className="mt-3 text-sm text-rose-400">{uploadError}</p>
+          )}
+          {isUploading && (
+            <div className="mt-3 space-y-2">
+              <p className="text-xs text-zinc-400">{uploadStage || 'Uploading…'}</p>
+              <div className="h-1.5 overflow-hidden rounded-full bg-zinc-800">
+                <div
+                  className="h-full bg-emerald-400 transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+              <p className="text-[11px] text-zinc-500">{uploadProgress}%</p>
+            </div>
           )}
           <div className="mt-2 text-center text-[11px] text-white/60">
             or <Link href="/pods/new" className="underline underline-offset-2 text-white hover:text-white/80">create pod</Link>
@@ -2229,6 +2309,8 @@ function ChatSidebar({
   onIntelligentQuery,
   onSeekToTime,
   processingStatus,
+  processingProgress = 0,
+  processingError,
   resources,
   onResourceClick,
   showLanding,
@@ -2249,6 +2331,8 @@ function ChatSidebar({
   onIntelligentQuery: (query: string) => void
   onSeekToTime: (timeInSeconds: number) => void
   processingStatus?: ProcessingStatus
+  processingProgress?: number
+  processingError?: string | null
   resources?: ResourceItem[]
   onResourceClick: (resource: ResourceItem) => void
   showLanding: boolean
@@ -2378,7 +2462,12 @@ function ChatSidebar({
           </div>
           {/* Video Processing Status */}
           {videoId && (
-            <ProcessingStatusLine videoId={videoId} processingStatus={processingStatus} />
+            <ProcessingStatusLine
+              videoId={videoId}
+              processingStatus={processingStatus}
+              progress={processingProgress}
+              error={processingError}
+            />
           )}
         </div>
 
@@ -2715,10 +2804,65 @@ function ChatSidebar({
   )
 }
 
-function ProcessingStatusLine({ videoId, processingStatus }: { videoId: string; processingStatus?: ProcessingStatus }) {
+function ProcessingBanner({
+  status,
+  progress,
+  error,
+  onRetry,
+}: {
+  status?: ProcessingStatus
+  progress?: number
+  error?: string | null
+  onRetry?: () => void
+}) {
+  const isFailed = status === 'failed' || Boolean(error)
+  const pct = Math.min(100, Math.max(0, progress ?? 0))
+
+  return (
+    <div
+      className={cx(
+        'rounded-xl border px-4 py-3 text-sm',
+        isFailed ? 'border-rose-500/40 bg-rose-500/10 text-rose-200' : 'border-amber-500/30 bg-amber-500/10 text-amber-100'
+      )}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <p>{error || getProcessingStatusLabel(status || 'pending')}</p>
+        {isFailed && onRetry && (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="shrink-0 rounded-lg border border-white/20 px-3 py-1 text-xs font-medium hover:bg-white/10"
+          >
+            Retry
+          </button>
+        )}
+      </div>
+      {!isFailed && (
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/30">
+          <div
+            className="h-full bg-amber-400 transition-all duration-500"
+            style={{ width: `${pct || 15}%` }}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ProcessingStatusLine({
+  videoId,
+  processingStatus,
+  progress: externalProgress = 0,
+  error,
+}: {
+  videoId: string
+  processingStatus?: ProcessingStatus
+  progress?: number
+  error?: string | null
+}) {
   const [status, setStatus] = useState<'queued' | 'pending' | 'extracting' | 'transcribing' | 'embedding' | 'complete' | 'failed'>('pending')
   const [label, setLabel] = useState('Processing video... Generating transcripts and chapters (max 3 hours)')
-  const [progress, setProgress] = useState(0)
+  const [pollProgress, setPollProgress] = useState(0)
 
   // Use SSE for real-time updates (fallback to polling if SSE fails)
   useEffect(() => {
@@ -2727,6 +2871,12 @@ function ProcessingStatusLine({ videoId, processingStatus }: { videoId: string; 
       setLabel(getProcessingStatusLabel(processingStatus))
     }
   }, [processingStatus])
+
+  useEffect(() => {
+    if (externalProgress > 0) {
+      setPollProgress(externalProgress)
+    }
+  }, [externalProgress])
 
   useEffect(() => {
     if (processingStatus && (processingStatus === 'complete' || processingStatus === 'failed')) {
@@ -2749,7 +2899,7 @@ function ProcessingStatusLine({ videoId, processingStatus }: { videoId: string; 
             const data = JSON.parse(event.data)
             setStatus(data.status as any)
             setLabel(data.message || getProcessingStatusLabel(data.status))
-            setProgress(data.progress || 0)
+            setPollProgress(data.progress || 0)
           } catch (e) {
             console.error('Failed to parse SSE status:', e)
           }
@@ -2761,7 +2911,7 @@ function ProcessingStatusLine({ videoId, processingStatus }: { videoId: string; 
             const data = JSON.parse(event.data)
             setStatus('complete')
             setLabel(data.message || 'Processing complete!')
-            setProgress(100)
+            setPollProgress(100)
             if (eventSource) {
               eventSource.close()
             }
@@ -2843,24 +2993,33 @@ function ProcessingStatusLine({ videoId, processingStatus }: { videoId: string; 
   }, [videoId, status, processingStatus])
 
   const color = status === 'complete' ? 'bg-emerald-400 text-emerald-300' : status === 'failed' ? 'bg-red-400 text-red-300' : 'bg-yellow-400 text-yellow-300'
-  const displayText = status === 'complete' ? label : status === 'failed' ? label : 'Processing video...'
+  const displayText =
+    status === 'complete'
+      ? label
+      : status === 'failed'
+        ? error || label
+        : getProcessingStatusLabel(status)
+  const pct = Math.min(100, Math.max(externalProgress || pollProgress, status === 'complete' ? 100 : 0))
 
   return (
     <div className="mt-2 flex flex-col gap-1 text-xs">
       <div className="flex items-center gap-2">
         <div className={`w-2 h-2 rounded-full animate-pulse ${color.split(' ')[0]}`}></div>
         <span className={color.split(' ').slice(1).join(' ')}>{displayText}</span>
-        {progress > 0 && progress < 100 && (
-          <span className="text-zinc-400 ml-auto">{progress}%</span>
+        {pct > 0 && pct < 100 && status !== 'failed' && (
+          <span className="text-zinc-400 ml-auto">{pct}%</span>
         )}
       </div>
-      {progress > 0 && progress < 100 && (
+      {pct > 0 && pct < 100 && status !== 'failed' && (
         <div className="h-1 bg-zinc-800 rounded-full overflow-hidden">
-          <div 
+          <div
             className="h-full bg-yellow-400 transition-all duration-500"
-            style={{ width: `${progress}%` }}
+            style={{ width: `${pct}%` }}
           />
         </div>
+      )}
+      {status === 'complete' && (
+        <p className="text-emerald-400/80">AI chat, chapters, and notes are ready.</p>
       )}
     </div>
   )
@@ -2877,21 +3036,89 @@ function formatTimestamp(seconds: number) {
 function NotesTab({ videoId }: { videoId?: string }) {
   const [notes, setNotes] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle')
+  const saveTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  useEffect(() => {
+    if (!videoId) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/notes?videoId=${encodeURIComponent(videoId)}`, {
+          credentials: 'include',
+        })
+        const data = await res.json()
+        if (!cancelled && data.success && data.note?.content) {
+          setNotes(data.note.content)
+        }
+      } catch {
+        /* ignore load errors */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [videoId])
+
+  const persistNotes = useCallback(
+    async (content: string) => {
+      if (!videoId) return
+      setIsSaving(true)
+      try {
+        const res = await fetch('/api/notes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ videoId, content }),
+        })
+        if (res.ok) {
+          setSaveStatus('saved')
+          setTimeout(() => setSaveStatus('idle'), 2000)
+        } else {
+          setSaveStatus('error')
+        }
+      } catch {
+        setSaveStatus('error')
+      } finally {
+        setIsSaving(false)
+      }
+    },
+    [videoId]
+  )
+
+  const handleNotesChange = (value: string) => {
+    setNotes(value)
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      persistNotes(value)
+    }, 800)
+  }
 
   const handlePromptClick = async (promptType: 'study-guide' | 'transcript' | 'summary') => {
     if (!videoId) return
-    
+
     setIsLoading(true)
     try {
-      // This would call the appropriate API endpoint
-      console.log(`Generating ${promptType} for video:`, videoId)
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
-      // For now, just add a placeholder
-      const placeholder = `Generated ${promptType} content for video ${videoId}...`
-      setNotes(prev => prev + (prev ? '\n\n' : '') + placeholder)
+      const res = await fetch(
+        `/api/video/${encodeURIComponent(videoId)}/materials?type=${promptType}`,
+        { credentials: 'include' }
+      )
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Generation failed')
+      }
+
+      const heading =
+        promptType === 'study-guide'
+          ? '📚 Study Guide'
+          : promptType === 'transcript'
+            ? '📝 Transcript'
+            : '📋 Summary'
+      const block = `${heading}\n\n${data.content}`
+      const next = notes ? `${notes}\n\n---\n\n${block}` : block
+      setNotes(next)
+      await persistNotes(next)
     } catch (error) {
       console.error(`Error generating ${promptType}:`, error)
     } finally {
@@ -2929,13 +3156,16 @@ function NotesTab({ videoId }: { videoId?: string }) {
 
         {/* Notes Editor (textarea fallback; rich editor removed for React 19 compatibility) */}
         <div className="rounded-lg border border-zinc-800 bg-zinc-900/40">
-          <div className="p-3 border-b border-zinc-800">
+          <div className="p-3 border-b border-zinc-800 flex items-center justify-between">
             <h4 className="text-sm font-semibold text-white">Your Notes</h4>
+            <span className="text-xs text-zinc-500">
+              {isSaving ? 'Saving…' : saveStatus === 'saved' ? 'Saved' : saveStatus === 'error' ? 'Save failed' : 'Auto-save on'}
+            </span>
           </div>
           <div className="p-3">
             <textarea
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={(e) => handleNotesChange(e.target.value)}
               placeholder="Start taking notes about this video... Use the buttons above to generate study guides, transcripts, or summaries."
               className="w-full h-80 bg-transparent text-white placeholder-zinc-400 resize-none focus:outline-none"
             />
@@ -2943,12 +3173,10 @@ function NotesTab({ videoId }: { videoId?: string }) {
         </div>
 
         {/* AI-Generated Content Preview */}
-        {videoId && (
+        {videoId && isLoading && (
           <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
-            <h4 className="text-sm font-semibold text-white mb-3">AI-Generated Content</h4>
-            <div className="text-sm text-zinc-300 space-y-2">
-              <p>AI-generated study materials will appear here once the video is fully processed.</p>
-            </div>
+            <h4 className="text-sm font-semibold text-white mb-3">Generating…</h4>
+            <p className="text-sm text-zinc-400">Pulling AI content into your notes.</p>
           </div>
         )}
       </div>

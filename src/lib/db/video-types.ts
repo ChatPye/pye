@@ -56,6 +56,7 @@ export function rowToVideoRecord(row: {
   lastAccessed: Date | null
   processedAt: Date | null
   publishedLabel: string | null
+  transcriptRef: string | null
   createdAt: Date
   updatedAt: Date
 }): VideoRecord {
@@ -81,6 +82,7 @@ export function rowToVideoRecord(row: {
     chapters: row.chapters ?? [],
     summary: row.summary || '',
     keyPoints: row.keyPoints ?? [],
+    transcriptRef: row.transcriptRef ?? undefined,
     processingStatus: (row.processingStatus as ProcessingStatus) || 'queued',
     errorMessage: row.errorMessage ?? undefined,
     statusHistory: (row.statusHistory ?? []).map((entry) => ({
@@ -120,6 +122,7 @@ export function videoRecordToInsert(
     summary: record.summary ?? null,
     keyPoints: record.keyPoints ?? [],
     errorMessage: record.errorMessage ?? null,
+    transcriptRef: record.transcriptRef ?? null,
     statusHistory: (record.statusHistory ?? []).map((entry) => ({
       status: entry.status,
       updatedAt:

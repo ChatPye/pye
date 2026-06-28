@@ -101,6 +101,15 @@ export const videos = pgTable("videos", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const videoNotes = pgTable("video_notes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  ownerClerkId: varchar("owner_clerk_id", { length: 255 }).notNull(),
+  externalVideoId: varchar("external_video_id", { length: 255 }).notNull(),
+  content: text("content").notNull().default(""),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const videoSegments = pgTable("video_segments", {
   id: uuid("id").primaryKey().defaultRandom(),
   videoId: uuid("video_id")

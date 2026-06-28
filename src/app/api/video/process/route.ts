@@ -40,10 +40,11 @@ export async function POST(request: NextRequest) {
     const isDevBypass = headers.get('X-Dev-Bypass') === 'true'
     const authUser = isDevBypass ? { id: 'dev-user' } : await requireAuth()
     const body = await request.json()
-    const { videoId, testMode, source = 'youtube' } = body as {
+    const { videoId, testMode, source = 'youtube', retry } = body as {
       videoId?: string
       testMode?: boolean
       source?: SourceType
+      retry?: boolean
     }
 
     if (!videoId) {
@@ -112,6 +113,22 @@ export async function POST(request: NextRequest) {
     }
 
     let existingVideo = await findVideoByExternalId(videoId)
+
+    if (existingVideo && retry && existingVideo.processingStatus === 'failed') {
+      const hasTranscript = (existingVideo.transcript?.length ?? 0) > 0;
+      const resumeStatus: ProcessingStatus = hasTranscript
+        ? 'embedding'
+        : existingVideo.transcriptRef
+          ? 'transcribing'
+          : 'queued';
+
+      existingVideo = await persistVideoRecord({
+        ...existingVideo,
+        videoId,
+        processingStatus: resumeStatus,
+        errorMessage: undefined,
+      });
+    }
 
     if (existingVideo) {
       appendStatusHistory(existingVideo, existingVideo.processingStatus as ProcessingStatus)

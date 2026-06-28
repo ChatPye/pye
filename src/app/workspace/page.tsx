@@ -17,6 +17,8 @@ function ResumeUploadHandler() {
   const { isSignedIn, isLoaded } = useAuth();
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStage, setUploadStage] = useState('Preparing…');
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
@@ -43,7 +45,11 @@ function ResumeUploadHandler() {
 
         const result = await uploadVideoFile(
           file,
-          file.name.replace(/\.[^/.]+$/, '')
+          file.name.replace(/\.[^/.]+$/, ''),
+          (pct, stage) => {
+            setUploadProgress(pct);
+            setUploadStage(stage === 'uploading' ? 'Uploading to secure storage…' : 'Finalizing…');
+          }
         );
 
         if (cancelled) return;
@@ -73,11 +79,18 @@ function ResumeUploadHandler() {
   if (!uploading && !uploadError) return null;
 
   return (
-    <div className="mx-auto max-w-lg px-6 py-8 text-center text-white">
+    <div className="mx-auto max-w-lg px-6 py-16 text-center text-white">
       {uploading ? (
         <>
           <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-b-2 border-white" />
-          <p className="text-zinc-300">Uploading your video…</p>
+          <p className="text-zinc-300">{uploadStage}</p>
+          <div className="mx-auto mt-4 h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-zinc-800">
+            <div
+              className="h-full bg-emerald-400 transition-all duration-300"
+              style={{ width: `${uploadProgress}%` }}
+            />
+          </div>
+          <p className="mt-2 text-xs text-zinc-500">{uploadProgress}%</p>
         </>
       ) : (
         <p className="text-rose-400">{uploadError}</p>

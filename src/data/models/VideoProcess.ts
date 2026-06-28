@@ -44,6 +44,8 @@ export interface VideoProcessDocument extends Document {
   }>;
   summary: string;
   keyPoints: string[];
+  /** JSON metadata for async jobs (transcribe job id, embedding offset, etc.) */
+  transcriptRef?: string;
   processingStatus: ProcessingStatus;
   errorMessage?: string;
   statusHistory: StatusHistoryEntry[];

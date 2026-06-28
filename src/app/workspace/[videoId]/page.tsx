@@ -28,6 +28,7 @@ type VideoRecord = {
   published: string;
   source: 'youtube' | 'upload' | 'unknown';
   processingStatus: 'queued' | 'pending' | 'extracting' | 'transcribing' | 'embedding' | 'complete' | 'failed';
+  errorMessage?: string;
   transcript?: TranscriptSegment[];
   embeddings?: Array<{ text: string; start: number; duration: number; embedding: number[] }>;
   chapters?: ChapterRecord[];
@@ -56,6 +57,7 @@ function WorkspaceVideoPage() {
   const [videoRecord, setVideoRecord] = useState<VideoRecord | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingError, setProcessingError] = useState<string | null>(null);
+  const [processingProgress, setProcessingProgress] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const rawVideoId = useMemo(
@@ -91,109 +93,152 @@ function WorkspaceVideoPage() {
     []
   );
 
+  const fetchStatus = useCallback(async (): Promise<boolean> => {
+    if (!rawVideoId) return true;
+    try {
+      const response = await fetch(
+        `/api/video/process?videoId=${encodeURIComponent(rawVideoId)}`,
+        { credentials: 'include' }
+      );
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        setLoadError(data?.error || 'Unable to load video status');
+        setIsProcessing(false);
+        return true;
+      }
+
+      const data = await response.json();
+      if (data?.video) {
+        setVideoRecord(data.video);
+        const status = data.video.processingStatus as VideoRecord['processingStatus'];
+
+        if (status === 'complete') {
+          setIsProcessing(false);
+          setProcessingError(null);
+          setProcessingProgress(100);
+          return true;
+        }
+
+        if (status === 'failed') {
+          setProcessingError(
+            data.video.errorMessage || 'Video processing failed. Tap Retry processing below.'
+          );
+          setIsProcessing(false);
+          return true;
+        }
+
+        setIsProcessing(true);
+        return false;
+      }
+
+      setLoadError('Video data unavailable');
+      setIsProcessing(false);
+      return true;
+    } catch (error) {
+      console.error('Video status poll failed', error);
+      setLoadError('Network error while loading video status');
+      setIsProcessing(false);
+      return true;
+    }
+  }, [rawVideoId]);
+
+  const runProcessingTick = useCallback(async () => {
+    if (!rawVideoId) return true;
+    try {
+      const response = await fetch('/api/video/process/tick', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ videoId: rawVideoId, source: resolvedSource }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (typeof data.progress === 'number') {
+        setProcessingProgress(data.progress);
+      }
+      if (data.video) {
+        setVideoRecord(data.video);
+      }
+      if (data.status === 'complete') {
+        setIsProcessing(false);
+        setProcessingError(null);
+        setProcessingProgress(100);
+        return true;
+      }
+      if (data.status === 'failed') {
+        setProcessingError(data.error || 'Processing failed');
+        setIsProcessing(false);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Processing tick failed', error);
+      return false;
+    }
+  }, [rawVideoId, resolvedSource]);
+
+  const handleRetryProcessing = useCallback(async () => {
+    if (!rawVideoId) return;
+    setProcessingError(null);
+    setIsProcessing(true);
+    setProcessingProgress(10);
+    await fetch('/api/video/process', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ videoId: rawVideoId, source: resolvedSource, retry: true }),
+    }).catch(() => null);
+    await runProcessingTick();
+  }, [rawVideoId, resolvedSource, runProcessingTick]);
+
   useEffect(() => {
     if (!rawVideoId) return;
 
     let cancelled = false;
     let pollTimer: NodeJS.Timeout | null = null;
 
-    const fetchStatus = async (): Promise<boolean> => {
-      try {
-        const response = await fetch(`/api/video/process?videoId=${encodeURIComponent(rawVideoId)}`, {
-          credentials: 'include',
-        });
-
-        if (!response.ok) {
-          if (!cancelled) {
-            const data = await response.json().catch(() => null);
-            setLoadError(data?.error || 'Unable to load video status');
-            setIsProcessing(false);
-          }
-          return true;
-        }
-
-        const data = await response.json();
-        if (cancelled) return true;
-
-        if (data?.video) {
-          setVideoRecord(data.video);
-          const status = data.video.processingStatus as VideoRecord['processingStatus'];
-
-          if (status === 'complete') {
-            setIsProcessing(false);
-            return true;
-          }
-
-          if (status === 'failed') {
-            setProcessingError('Video processing failed. Please re-upload or try another video.');
-            setIsProcessing(false);
-            return true;
-          }
-
-          setIsProcessing(true);
-          return false;
-        }
-
-        setLoadError('Video data unavailable');
-        setIsProcessing(false);
-        return true;
-      } catch (error) {
-        if (!cancelled) {
-          console.error('Video status poll failed', error);
-          setLoadError('Network error while loading video status');
-          setIsProcessing(false);
-        }
-        return true;
-      }
-    };
-
-    const startProcessing = async () => {
+    const bootstrap = async () => {
       setProcessingError(null);
       setLoadError(null);
       setIsProcessing(true);
 
-      try {
-        await fetch('/api/video/process', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ videoId: rawVideoId, source: resolvedSource }),
-        });
-      } catch (error) {
-        console.error('Failed to initiate video processing', error);
-        if (!cancelled) {
-          setLoadError('Unable to initiate video processing. Please try again.');
-          setIsProcessing(false);
-        }
-        return;
-      }
+      await fetch('/api/video/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ videoId: rawVideoId, source: resolvedSource }),
+      }).catch(() => null);
 
-      const completedImmediately = await fetchStatus();
-      if (completedImmediately) {
-        return;
-      }
+      if (cancelled) return;
+
+      await runProcessingTick();
+      const done = await fetchStatus();
+      if (done || cancelled) return;
 
       pollTimer = setInterval(async () => {
+        await runProcessingTick();
         const finished = await fetchStatus();
         if (finished && pollTimer) {
           clearInterval(pollTimer);
           pollTimer = null;
         }
-      }, 5000);
+      }, 4000);
     };
 
-    startProcessing();
+    bootstrap();
 
     return () => {
       cancelled = true;
-      if (pollTimer) {
-        clearInterval(pollTimer);
-      }
+      if (pollTimer) clearInterval(pollTimer);
     };
-  }, [rawVideoId, resolvedSource]);
+  }, [rawVideoId, resolvedSource, fetchStatus, runProcessingTick]);
 
   if (!rawVideoId) {
-    return <div className="min-h-screen bg-black text-white flex items-center justify-center">Video not found.</div>;
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        Video not found.
+      </div>
+    );
   }
 
   if (resolvedSource === 'upload' && rawVideoId && !isUploadVideoId(rawVideoId)) {
@@ -202,7 +247,8 @@ function WorkspaceVideoPage() {
         <div className="text-center space-y-4 max-w-md">
           <h1 className="text-2xl font-semibold">Video not uploaded</h1>
           <p className="text-zinc-400">
-            &ldquo;{rawVideoId}&rdquo; is a filename, not an uploaded video. Use Attach to upload your file, or start from the home page.
+            &ldquo;{rawVideoId}&rdquo; is a filename, not an uploaded video. Use Attach to upload
+            your file, or start from the home page.
           </p>
           <Link href="/workspace" className="inline-block text-blue-400 hover:text-blue-300">
             Back to workspace
@@ -223,17 +269,6 @@ function WorkspaceVideoPage() {
     );
   }
 
-  if (processingError) {
-    return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <h1 className="text-2xl font-semibold">Processing error</h1>
-          <p className="text-zinc-400">{processingError}</p>
-        </div>
-      </div>
-    );
-  }
-
   const mappedChapters = mapChapters(videoRecord?.chapters, videoRecord?.duration);
 
   const workspaceVideoData = videoRecord
@@ -243,9 +278,9 @@ function WorkspaceVideoPage() {
         description: videoRecord.description || '',
         duration: videoRecord.duration || 0,
         publishedAt: videoRecord.published || new Date().toISOString(),
-        thumbnail: videoRecord.thumbnail || `/api/thumbnail/${rawVideoId}`,
-        views: (videoRecord as any).views,
-        likes: (videoRecord as any).likes,
+        thumbnail: videoRecord.thumbnail || '',
+        views: (videoRecord as VideoRecord & { views?: number }).views,
+        likes: (videoRecord as VideoRecord & { likes?: number }).likes,
         tags: videoRecord.tags || [],
       }
     : undefined;
@@ -257,6 +292,9 @@ function WorkspaceVideoPage() {
       source={resolvedSource}
       uploadedName={uploadedName}
       processingStatus={videoRecord?.processingStatus || (isProcessing ? 'pending' : 'complete')}
+      processingProgress={processingProgress}
+      processingError={processingError}
+      onRetryProcessing={handleRetryProcessing}
       videoData={workspaceVideoData}
       chapters={mappedChapters}
       resources={[]}

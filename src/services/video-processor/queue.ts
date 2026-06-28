@@ -1,12 +1,6 @@
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
-import { after } from 'next/server';
-import { triggerVideoProcessing } from './worker';
-
-export interface ProcessingJobPayload {
-  videoId: string;
-  ownerId: string | null;
-  source: 'youtube' | 'upload';
-}
+import { startVideoProcessing } from '@/services/video-processor/staged-worker';
+import type { ProcessingJobPayload } from '@/services/video-processor/staged-worker';
 
 const queueUrl = process.env.SQS_VIDEO_QUEUE_URL;
 const sqsClient = queueUrl
@@ -21,18 +15,8 @@ export async function enqueueVideoProcessingJob(payload: ProcessingJobPayload): 
     !sqsClient;
 
   if (shouldBypassQueue) {
-    if (process.env.VERCEL === '1') {
-      after(async () => {
-        try {
-          await triggerVideoProcessing(payload);
-        } catch (error) {
-          console.error('[VideoProcessor] Background job failed', error);
-        }
-      });
-      return;
-    }
-
-    await triggerVideoProcessing(payload);
+    // Staged worker: start first tick only; client polls /api/video/process/tick
+    await startVideoProcessing(payload);
     return;
   }
 
