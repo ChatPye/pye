@@ -143,6 +143,13 @@ export function checkDDoSProtection(request: NextRequest, headers?: Headers): {
   reason?: string;
   retryAfter?: number;
 } {
+  const pathname = request.nextUrl.pathname;
+
+  // Video players issue many byte-range requests; do not rate-limit them like API calls
+  if (/^\/api\/video\/[^/]+\/stream$/.test(pathname)) {
+    return { allowed: true };
+  }
+
   const ip = getClientIP(request, headers);
   
   // Check whitelist

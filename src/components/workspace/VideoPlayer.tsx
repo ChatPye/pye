@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
-import Plyr from 'plyr';
-import 'plyr/dist/plyr.css';
+import { useState, useRef, useEffect } from 'react';
+import { Play, Pause, Volume2, VolumeX, Maximize, Settings, Clock } from 'lucide-react';
 import { formatMediaTime, safeSeconds } from '@/lib/time-utils';
 
 interface VideoPlayerProps {
@@ -16,8 +15,6 @@ interface VideoPlayerProps {
   className?: string;
 }
 
-const MAX_RETRIES = 3;
-
 export default function VideoPlayer({
   videoId,
   title,
@@ -28,67 +25,75 @@ export default function VideoPlayer({
   onVideoRef,
   className = '',
 }: VideoPlayerProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const plyrRef = useRef<Plyr | null>(null);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
+  const [showControls, setShowControls] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  const streamSrc = `/api/video/${encodeURIComponent(videoId)}/stream`;
+  const setVideoRef = (el: HTMLVideoElement | null) => {
+    videoRef.current = el;
+    onVideoRef?.(el);
+  };
 
-  const handleRetry = useCallback(() => {
-    setLoadError(null);
-    setRetryCount((c) => c + 1);
-  }, []);
+  const handlePlayPause = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (isPlaying) {
+      video.pause();
+    } else {
+      void video.play().catch(() => setLoadError('Unable to play video'));
+    }
+  };
+
+  const handleMute = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = !isMuted;
+    setIsMuted(!isMuted);
+  };
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const video = videoRef.current;
+    if (!video) return;
+    const time = parseFloat(e.target.value);
+    video.currentTime = time;
+    setCurrentTime(time);
+    onSeek?.(time);
+  };
+
+  const handleFullscreen = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (!isFullscreen) {
+      void video.requestFullscreen();
+      setIsFullscreen(true);
+    } else {
+      void document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  };
+
+  const handleMouseMove = () => {
+    setShowControls(true);
+    if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    controlsTimeoutRef.current = setTimeout(() => setShowControls(false), 3000);
+  };
 
   useEffect(() => {
-    if (source !== 'upload' || !containerRef.current) return;
-
-    const video = document.createElement('video');
-    video.className = 'w-full h-full';
-    video.playsInline = true;
-    video.preload = 'metadata';
-    video.crossOrigin = 'anonymous';
-    if (posterUrl) video.poster = posterUrl;
-
-    const sourceEl = document.createElement('source');
-    sourceEl.src = `${streamSrc}?v=${retryCount}`;
-    sourceEl.type = 'video/mp4';
-    video.appendChild(sourceEl);
-
-    containerRef.current.innerHTML = '';
-    containerRef.current.appendChild(video);
-    videoRef.current = video;
-    onVideoRef?.(video);
-
-    const player = new Plyr(video, {
-      controls: [
-        'play-large',
-        'play',
-        'progress',
-        'current-time',
-        'duration',
-        'mute',
-        'volume',
-        'settings',
-        'pip',
-        'airplay',
-        'fullscreen',
-      ],
-      settings: ['quality', 'speed'],
-      speed: { selected: 1, options: [0.5, 0.75, 1, 1.25, 1.5, 2] },
-      ratio: '16:9',
-      loadSprite: false,
-      keyboard: { focused: true, global: false },
-      tooltips: { controls: true, seek: true },
-    });
-
-    plyrRef.current = player;
+    const video = videoRef.current;
+    if (!video || source !== 'upload') return;
 
     const syncTime = () => {
       const t = safeSeconds(video.currentTime);
       const d = safeSeconds(video.duration);
+      setCurrentTime(t);
+      setDuration(d);
       onTimeUpdate?.(t, d);
     };
 
@@ -97,40 +102,22 @@ export default function VideoPlayer({
       syncTime();
     };
 
-    const onError = () => {
-      if (retryCount < MAX_RETRIES) {
-        setTimeout(() => handleRetry(), 1500);
-        return;
-      }
-      setLoadError('Video failed to load. Check your connection and try again.');
-    };
+    const onError = () => setLoadError('Video failed to load. Try refreshing the page.');
 
-    player.on('timeupdate', syncTime);
-    player.on('seeked', () => {
-      syncTime();
-      onSeek?.(safeSeconds(video.currentTime));
-    });
-    player.on('loadedmetadata', onLoaded);
-    player.on('error', onError);
+    video.addEventListener('timeupdate', syncTime);
+    video.addEventListener('loadedmetadata', onLoaded);
+    video.addEventListener('play', () => setIsPlaying(true));
+    video.addEventListener('pause', () => setIsPlaying(false));
     video.addEventListener('error', onError);
 
     return () => {
-      player.destroy();
-      plyrRef.current = null;
-      videoRef.current = null;
-      onVideoRef?.(null);
+      video.removeEventListener('timeupdate', syncTime);
+      video.removeEventListener('loadedmetadata', onLoaded);
+      video.removeEventListener('play', () => setIsPlaying(true));
+      video.removeEventListener('pause', () => setIsPlaying(false));
+      video.removeEventListener('error', onError);
     };
-  }, [
-    source,
-    streamSrc,
-    posterUrl,
-    retryCount,
-    onTimeUpdate,
-    onSeek,
-    onVideoRef,
-    handleRetry,
-    videoId,
-  ]);
+  }, [source, onTimeUpdate, videoId]);
 
   useEffect(() => {
     if (source === 'youtube' && iframeRef.current && onSeek) {
@@ -161,35 +148,118 @@ export default function VideoPlayer({
     );
   }
 
+  const streamSrc = `/api/video/${encodeURIComponent(videoId)}/stream`;
+  const sliderMax = duration > 0 ? duration : 0;
+
   return (
-    <div className={`relative ${className}`}>
-      <div
-        ref={containerRef}
-        className="plyr-react aspect-video overflow-hidden rounded-xl bg-black"
-        data-plyr-provider="html5"
-      />
+    <div
+      className={`group relative aspect-video overflow-hidden rounded-xl bg-black ${className}`}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={() => setShowControls(false)}
+    >
+      <video
+        ref={setVideoRef}
+        key={streamSrc}
+        className="h-full w-full bg-black object-contain"
+        poster={posterUrl || undefined}
+        preload="metadata"
+        playsInline
+        controls={false}
+      >
+        <source src={streamSrc} type="video/mp4" />
+        Your browser does not support the video tag.
+      </video>
 
       {loadError && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-xl bg-black/85 px-4 text-center text-sm text-rose-300">
-          <p>{loadError}</p>
-          <button
-            type="button"
-            onClick={handleRetry}
-            className="rounded-lg border border-white/20 px-4 py-2 text-xs text-white hover:bg-white/10"
-          >
-            Retry playback
-          </button>
+        <div className="absolute inset-0 flex items-center justify-center bg-black/80 px-4 text-center text-sm text-rose-300">
+          {loadError}
         </div>
       )}
 
-      {retryCount > 0 && !loadError && (
-        <p className="mt-1 text-center text-[10px] text-zinc-600">
-          Buffering… attempt {retryCount + 1}
-        </p>
-      )}
+      <div
+        className={`absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0'}`}
+      >
+        <div className="absolute left-4 right-4 top-4 flex items-center justify-between">
+          <h3 className="max-w-xs truncate font-medium text-white">{title}</h3>
+          <button
+            type="button"
+            onClick={handleFullscreen}
+            className="rounded-full bg-black/50 p-2 transition-colors hover:bg-black/70"
+          >
+            <Maximize className="h-5 w-5 text-white" />
+          </button>
+        </div>
+
+        <div className="absolute inset-0 flex items-center justify-center">
+          <button
+            type="button"
+            onClick={handlePlayPause}
+            className="rounded-full bg-white/20 p-4 backdrop-blur-sm transition-colors hover:bg-white/30"
+          >
+            {isPlaying ? (
+              <Pause className="h-8 w-8 text-white" />
+            ) : (
+              <Play className="ml-1 h-8 w-8 text-white" />
+            )}
+          </button>
+        </div>
+
+        <div className="absolute bottom-4 left-4 right-4">
+          <div className="mb-3">
+            <input
+              type="range"
+              min={0}
+              max={sliderMax}
+              step={0.1}
+              value={Math.min(currentTime, sliderMax || 0)}
+              onChange={handleSeek}
+              disabled={sliderMax <= 0}
+              className="h-1 w-full cursor-pointer appearance-none rounded-lg bg-white/30"
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handlePlayPause}
+                className="rounded-full bg-black/50 p-2 transition-colors hover:bg-black/70"
+              >
+                {isPlaying ? (
+                  <Pause className="h-5 w-5 text-white" />
+                ) : (
+                  <Play className="h-5 w-5 text-white" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={handleMute}
+                className="rounded-full bg-black/50 p-2 transition-colors hover:bg-black/70"
+              >
+                {isMuted ? (
+                  <VolumeX className="h-5 w-5 text-white" />
+                ) : (
+                  <Volume2 className="h-5 w-5 text-white" />
+                )}
+              </button>
+              <div className="flex items-center gap-1 text-sm text-white">
+                <Clock className="h-4 w-4" />
+                <span>
+                  {formatMediaTime(currentTime)} / {formatMediaTime(duration)}
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="rounded-full bg-black/50 p-2 transition-colors hover:bg-black/70"
+            >
+              <Settings className="h-5 w-5 text-white" />
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-// Re-export for seek helpers used elsewhere
 export { formatMediaTime };

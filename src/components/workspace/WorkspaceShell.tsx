@@ -214,24 +214,6 @@ const placeholderMessages: ChatMessage[] = [
   },
 ]
 
-const PROCESSING_STATUS_LABELS: Record<ProcessingStatus, string> = {
-  queued: 'queued in the processing pipeline',
-  pending: 'preparing the processing pipeline',
-  extracting: 'extracting audio and frames',
-  transcribing: 'transcribing the audio',
-  embedding: 'creating semantic embeddings',
-  complete: 'processed and ready',
-  failed: 'marked as failed',
-}
-
-function describeProcessingStatus(status?: ProcessingStatus | string | null): string {
-  if (!status) return 'processing'
-  if (status in PROCESSING_STATUS_LABELS) {
-    return PROCESSING_STATUS_LABELS[status as ProcessingStatus]
-  }
-  return 'processing'
-}
-
 function getProcessingStatusLabel(status: ProcessingStatus, progress?: number): string {
   return formatProcessingLabel(status, progress)
 }
@@ -991,8 +973,9 @@ export default function WorkspaceShell({
       if (processingStatus === 'failed') {
         addAssistantMessage("I'm unable to answer questions because video processing failed. Please try processing the video again or use another link.")
       } else {
-        const statusDescription = describeProcessingStatus(processingStatus)
-        addAssistantMessage(`The video is still ${statusDescription}. I'll notify you as soon as it's ready for chat.`)
+        addAssistantMessage(
+          `You can watch the video now. Chat is still preparing (${processingProgress || 0}%) — try again shortly.`
+        )
       }
       return
     }
@@ -1266,6 +1249,34 @@ export default function WorkspaceShell({
           upgradeAvailable={upgradeAvailable}
         />
 
+        {showVideoPage && !isProcessed && (
+          processingStatus === 'failed' || processingError ? (
+            <div className="border-b border-rose-500/30 bg-rose-500/10 px-4 py-2.5 text-xs text-rose-200">
+              <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-3">
+                <p className="truncate">{processingError || 'Processing failed'}</p>
+                {onRetryProcessing && (
+                  <button
+                    type="button"
+                    onClick={onRetryProcessing}
+                    className="shrink-0 rounded-md border border-white/20 px-2.5 py-1 text-[11px] hover:bg-white/10"
+                  >
+                    Retry
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <LearningSetupExperience
+              mode="processing"
+              progress={processingProgress ?? 0}
+              processingStatus={processingStatus}
+              videoId={videoId}
+              videoPlayable={source === 'upload'}
+              compact
+            />
+          )
+        )}
+
         <div className="flex flex-1 overflow-hidden">
           <WorkspaceSidebar
             collapsed={sidebarCollapsed}
@@ -1297,16 +1308,6 @@ export default function WorkspaceShell({
                         onSeek={seekToTime}
                       />
                     </div>
-
-                    {(processingError || !isProcessed) && (
-                      <ProcessingBanner
-                        status={processingStatus}
-                        progress={processingProgress}
-                        error={processingError}
-                        onRetry={onRetryProcessing}
-                        videoId={videoId}
-                      />
-                    )}
 
                     {/* Action Bar */}
                     {actionToast && (
@@ -1436,16 +1437,6 @@ export default function WorkspaceShell({
                           onSeek={seekToTime}
                         />
                       </div>
-
-                      {(processingError || !isProcessed) && (
-                        <ProcessingBanner
-                          status={processingStatus}
-                          progress={processingProgress}
-                          error={processingError}
-                          onRetry={onRetryProcessing}
-                          videoId={videoId}
-                        />
-                      )}
 
                       {actionToast && (
                         <div className="mb-2 text-xs text-rose-300">{actionToast}</div>
@@ -1961,13 +1952,13 @@ function WorkspaceLanding({
             <p className="mt-3 text-sm text-rose-400">{uploadError}</p>
           )}
           {isUploading && (
-            <div className="mt-4">
-              <LearningSetupExperience
-                mode="upload"
-                progress={uploadProgress}
-                stage={uploadStage || 'uploading'}
-              />
-            </div>
+            <LearningSetupExperience
+              mode="upload"
+              progress={uploadProgress}
+              stage={uploadStage || 'uploading'}
+              compact
+              className="mt-3 rounded-lg border border-zinc-800"
+            />
           )}
           <div className="mt-2 text-center text-[11px] text-white/60">
             or <Link href="/pods/new" className="underline underline-offset-2 text-white hover:text-white/80">create pod</Link>
@@ -2823,52 +2814,6 @@ function ChatSidebar({
         )}
       </div>
     </aside>
-  )
-}
-
-function ProcessingBanner({
-  status,
-  progress,
-  error,
-  onRetry,
-  videoId,
-}: {
-  status?: ProcessingStatus
-  progress?: number
-  error?: string | null
-  onRetry?: () => void
-  videoId?: string
-}) {
-  const isFailed = status === 'failed' || Boolean(error)
-  const pct = Math.min(100, Math.max(0, progress ?? 0))
-
-  if (isFailed) {
-    return (
-      <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-        <div className="flex items-center justify-between gap-3">
-          <p>{error || getProcessingStatusLabel(status || 'failed')}</p>
-          {onRetry && (
-            <button
-              type="button"
-              onClick={onRetry}
-              className="shrink-0 rounded-lg border border-white/20 px-3 py-1 text-xs font-medium hover:bg-white/10"
-            >
-              Retry
-            </button>
-          )}
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <LearningSetupExperience
-      mode="processing"
-      progress={pct}
-      processingStatus={status}
-      videoId={videoId}
-      compact={false}
-    />
   )
 }
 

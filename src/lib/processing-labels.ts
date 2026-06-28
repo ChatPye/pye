@@ -46,17 +46,42 @@ export function getProcessingStatusLabel(
 }
 
 export function getUploadStageLabel(stage: string, progress: number): string {
+  const pct = Math.round(progress);
   switch (stage) {
     case 'preparing':
-      return 'We are setting up your learning workspace';
+      return `Uploading · ${pct}%`;
     case 'uploading':
-      return 'We are setting up your learning workspace';
+      return `Uploading · ${pct}%`;
     case 'finalizing':
     case 'done':
-      return 'Almost there — preparing your workspace';
+      return `Finishing upload · ${pct}%`;
     default:
-      return 'We are setting up your learning workspace';
+      return `Uploading · ${pct}%`;
   }
+}
+
+/** One-line label for the slim workspace status bar */
+export function getCompactWorkspaceLabel(options: {
+  mode: 'upload' | 'processing';
+  progress: number;
+  stage?: string;
+  status?: ProcessingStatus | string;
+  videoPlayable?: boolean;
+}): string {
+  const pct = Math.min(100, Math.max(0, Math.round(options.progress)));
+  if (options.mode === 'upload') {
+    return getUploadStageLabel(options.stage || 'uploading', pct);
+  }
+  if (options.videoPlayable && options.status !== 'complete' && options.status !== 'failed') {
+    return `Video ready — play to learn · Chat preparing · ${pct}%`;
+  }
+  if (options.status === 'failed') {
+    return 'Processing failed';
+  }
+  if (options.status === 'complete') {
+    return 'Workspace ready';
+  }
+  return `Preparing workspace · ${pct}%`;
 }
 
 export const PROCESSING_STEPS = [

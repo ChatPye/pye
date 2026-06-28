@@ -105,7 +105,13 @@ function WorkspaceVideoPage() {
       );
 
       if (!response.ok) {
+        if (response.status === 429) {
+          return false;
+        }
         const data = await response.json().catch(() => null);
+        if (response.status >= 500) {
+          return false;
+        }
         setLoadError(data?.error || 'Unable to load video status');
         setIsProcessing(false);
         return true;
@@ -151,9 +157,7 @@ function WorkspaceVideoPage() {
       return true;
     } catch (error) {
       console.error('Video status poll failed', error);
-      setLoadError('Network error while loading video status');
-      setIsProcessing(false);
-      return true;
+      return false;
     }
   }, [rawVideoId]);
 
@@ -166,6 +170,9 @@ function WorkspaceVideoPage() {
         credentials: 'include',
         body: JSON.stringify({ videoId: rawVideoId, source: resolvedSource }),
       });
+      if (response.status === 429) {
+        return false;
+      }
       const data = await response.json().catch(() => ({}));
       if (typeof data.progress === 'number') {
         setProcessingProgress(data.progress);

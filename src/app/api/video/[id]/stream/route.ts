@@ -93,9 +93,8 @@ export async function GET(
     });
   } catch (error) {
     console.error('Video stream error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Stream failed' },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : 'Stream failed';
+    const status = message.includes('Authentication') ? 401 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

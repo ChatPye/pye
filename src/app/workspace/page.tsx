@@ -81,18 +81,22 @@ function ResumeUploadHandler() {
   if (!uploading && !uploadError) return null;
 
   return (
-    <div className="mx-auto max-w-lg px-6 py-16 text-center text-white">
+    <>
       <NotificationPrompt enabled={uploading} />
-      {uploading ? (
+      {uploading && (
         <LearningSetupExperience
           mode="upload"
           progress={uploadProgress}
           stage={uploadStage}
+          compact
         />
-      ) : (
-        <p className="text-rose-400">{uploadError}</p>
       )}
-    </div>
+      {uploadError && !uploading && (
+        <div className="border-b border-rose-500/30 bg-rose-500/10 px-4 py-2 text-center text-xs text-rose-300">
+          {uploadError}
+        </div>
+      )}
+    </>
   );
 }
 
