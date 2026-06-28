@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useEffect, useState, useCallback } from 'react';
+import { Suspense, useMemo, useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import WorkspaceShell from '@/components/workspace/WorkspaceShell';
@@ -37,6 +37,20 @@ type VideoRecord = {
 };
 
 export default function WorkspacePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-black text-white flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white" />
+        </div>
+      }
+    >
+      <WorkspaceVideoPage />
+    </Suspense>
+  );
+}
+
+function WorkspaceVideoPage() {
   const params = useParams<{ videoId: string }>();
   const searchParams = useSearchParams();
   const [videoRecord, setVideoRecord] = useState<VideoRecord | null>(null);
@@ -49,8 +63,13 @@ export default function WorkspacePage() {
     [params?.videoId]
   );
 
-  const videoSource = searchParams.get('source');
-  const source = videoSource === 'upload' ? 'upload' : 'youtube';
+  const videoSourceParam = searchParams.get('source');
+  const resolvedSource: 'youtube' | 'upload' =
+    videoSourceParam === 'upload' || (rawVideoId ? isUploadVideoId(rawVideoId) : false)
+      ? 'upload'
+      : videoRecord?.source === 'upload'
+        ? 'upload'
+        : 'youtube';
 
   const uploadedNameParam = searchParams.get('name');
   const uploadedName = uploadedNameParam ? decodeURIComponent(uploadedNameParam) : undefined;
@@ -138,7 +157,7 @@ export default function WorkspacePage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ videoId: rawVideoId, source }),
+          body: JSON.stringify({ videoId: rawVideoId, source: resolvedSource }),
         });
       } catch (error) {
         console.error('Failed to initiate video processing', error);
@@ -171,13 +190,13 @@ export default function WorkspacePage() {
         clearInterval(pollTimer);
       }
     };
-  }, [rawVideoId, source]);
+  }, [rawVideoId, resolvedSource]);
 
   if (!rawVideoId) {
     return <div className="min-h-screen bg-black text-white flex items-center justify-center">Video not found.</div>;
   }
 
-  if (source === 'upload' && !isUploadVideoId(rawVideoId)) {
+  if (resolvedSource === 'upload' && rawVideoId && !isUploadVideoId(rawVideoId)) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center px-6">
         <div className="text-center space-y-4 max-w-md">
@@ -235,7 +254,7 @@ export default function WorkspacePage() {
     <WorkspaceShell
       videoId={rawVideoId}
       videoTitle={videoRecord?.title}
-      source={source}
+      source={resolvedSource}
       uploadedName={uploadedName}
       processingStatus={videoRecord?.processingStatus || (isProcessing ? 'pending' : 'complete')}
       videoData={workspaceVideoData}

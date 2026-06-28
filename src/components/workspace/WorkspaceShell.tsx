@@ -1222,9 +1222,14 @@ export default function WorkspaceShell({
                         videoId={videoId ?? ''}
                         title={(derivedTitle || aiMeta?.title || oembedMeta?.title) ?? 'Video session'}
                         source={source}
-                        onTimeUpdate={(time) => {
+                        posterUrl={videoData?.thumbnail}
+                        onVideoRef={setVideoPlayerRef}
+                        onTimeUpdate={(time, dur) => {
                           setCurrentTime(time)
+                          const d = Number.isFinite(dur) && dur > 0 ? dur : videoData?.duration ?? 0
+                          if (d > 0) setVideoDuration(d)
                         }}
+                        onSeek={seekToTime}
                       />
                     </div>
 
@@ -1346,9 +1351,12 @@ export default function WorkspaceShell({
                           videoId={videoId ?? ''}
                         title={(derivedTitle || aiMeta?.title || oembedMeta?.title) ?? 'Video session'}
                           source={source}
-                          onTimeUpdate={(time, duration) => {
+                          posterUrl={videoData?.thumbnail}
+                          onVideoRef={setVideoPlayerRef}
+                          onTimeUpdate={(time, dur) => {
                             setCurrentTime(time)
-                            if (duration) setVideoDuration(duration)
+                            const d = Number.isFinite(dur) && dur > 0 ? dur : videoData?.duration ?? 0
+                            if (d > 0) setVideoDuration(d)
                           }}
                           onSeek={seekToTime}
                         />

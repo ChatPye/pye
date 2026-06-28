@@ -7,6 +7,10 @@ import { useAuth } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import { useUnifiedRouting } from '@/lib/routing';
 import { uploadVideoFile } from '@/lib/upload-video';
+import {
+  savePendingUpload,
+  setPendingUploadFlag,
+} from '@/lib/pending-upload-store';
 import { CLERK_SIGN_IN_URL, CLERK_SIGN_UP_URL } from '@/lib/clerk-env';
 
 export default function Hero() {
@@ -66,10 +70,17 @@ export default function Hero() {
     }
 
     if (!isSignedIn) {
-      setError('Sign in first — then select your video again and click Start learning.');
+      setError('Sign in to upload — your video will resume automatically after login.');
+      try {
+        await savePendingUpload(selectedFile);
+        setPendingUploadFlag();
+      } catch {
+        setError('Could not save your video for sign-in. Sign in first, then upload again.');
+        return;
+      }
       redirectToSignIn({
         source: 'hero',
-        query: { source: 'upload' },
+        query: { resumeUpload: '1' },
       });
       return;
     }

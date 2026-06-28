@@ -62,7 +62,7 @@ export class AudioTranscriptionService {
       const processingTime = Date.now() - startTime;
 
       return {
-        transcript: transcript.text,
+        transcript: transcript.segments.length > 0 ? transcript.segments : transcript.text,
         confidence: transcript.confidence,
         processingTime,
         jobId
@@ -157,8 +157,52 @@ export class AudioTranscriptionService {
   }
 
   // Wait for transcription completion
+  private parseAwsTranscriptSegments(data: {
+    results?: { items?: Array<Record<string, unknown>>; transcripts?: Array<{ transcript?: string }> };
+  }): Array<{ text: string; start: number; duration: number }> {
+    const items = data?.results?.items;
+    if (!Array.isArray(items)) return [];
+
+    const segments: Array<{ text: string; start: number; duration: number }> = [];
+    let buffer = '';
+    let segmentStart = 0;
+    let lastEnd = 0;
+
+    const flush = (endTime: number) => {
+      const text = buffer.trim();
+      if (!text) return;
+      const start = segmentStart;
+      const duration = Math.max(0.5, endTime - start);
+      segments.push({ text, start, duration });
+      buffer = '';
+      segmentStart = endTime;
+    };
+
+    for (const item of items) {
+      if (item.type !== 'pronunciation') continue;
+      const alt = (item.alternatives as Array<{ content?: string }> | undefined)?.[0];
+      const word = alt?.content?.trim();
+      if (!word) continue;
+
+      const start = parseFloat(String(item.start_time ?? '0'));
+      const end = parseFloat(String(item.end_time ?? start));
+
+      if (!buffer) segmentStart = start;
+      buffer += `${buffer ? ' ' : ''}${word}`;
+      lastEnd = end;
+
+      if (buffer.length > 120) {
+        flush(lastEnd);
+      }
+    }
+
+    if (buffer) flush(lastEnd || segmentStart + 1);
+    return segments;
+  }
+
   private async waitForTranscriptionCompletion(jobId: string): Promise<{
     text: string;
+    segments: Array<{ text: string; start: number; duration: number }>;
     confidence: number;
   }> {
     const maxWaitTime = 300000; // 5 minutes
@@ -178,10 +222,13 @@ export class AudioTranscriptionService {
           // Get transcript from S3
           const transcriptKey = `transcripts/${jobId}.json`;
           const transcriptData = await this.getTranscriptFromS3(transcriptKey);
-          
+          const text = transcriptData.results?.transcripts?.[0]?.transcript ?? '';
+          const segments = this.parseAwsTranscriptSegments(transcriptData);
+
           return {
-            text: transcriptData.results.transcripts[0].transcript,
-            confidence: this.calculateAverageConfidence(transcriptData.results.items),
+            text,
+            segments,
+            confidence: this.calculateAverageConfidence(transcriptData.results?.items),
           };
         } else if (job?.TranscriptionJobStatus === 'FAILED') {
           throw new Error(`Transcription job failed: ${job.FailureReason}`);

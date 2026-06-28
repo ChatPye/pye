@@ -176,11 +176,14 @@ export async function POST(request: NextRequest) {
       videoId,
       ownerId: authUser.id,
       source,
-      title: `Video ${videoId}`,
-      channel: 'Unknown Channel',
+      title: source === 'upload' ? `Uploaded video` : `Video ${videoId}`,
+      channel: source === 'upload' ? 'Uploaded Video' : 'Unknown Channel',
       description: '',
       duration: 0,
-      thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+      thumbnail:
+        source === 'upload' || isUploadVideoId(videoId)
+          ? ''
+          : `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
       published: new Date().toISOString(),
       processingStatus: 'queued',
       accessCount: 1,

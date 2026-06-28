@@ -208,6 +208,11 @@ export async function triggerVideoProcessing(payload: ProcessingJobPayload): Pro
     await updateVideoStatus(videoId, 'transcribing')
     await persistTranscript(segments)
     logger.info('Custom video transcript persisted', { videoId, segmentCount: segments.length })
+
+    const last = segments[segments.length - 1]
+    if (last) {
+      metadataUpdates.duration = Math.ceil(last.start + (last.duration || 0))
+    }
   }
 
   await updateVideoStatus(videoId, 'embedding')
