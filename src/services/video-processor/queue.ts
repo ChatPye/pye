@@ -1,5 +1,6 @@
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import { startVideoProcessing } from '@/services/video-processor/staged-worker';
+import { triggerBackgroundProcessing } from '@/lib/video/trigger-processing';
 import type { ProcessingJobPayload } from '@/services/video-processor/staged-worker';
 
 const queueUrl = process.env.SQS_VIDEO_QUEUE_URL;
@@ -14,9 +15,14 @@ export async function enqueueVideoProcessingJob(payload: ProcessingJobPayload): 
     !queueUrl ||
     !sqsClient;
 
+  await startVideoProcessing(payload);
+
   if (shouldBypassQueue) {
-    // Staged worker: start first tick only; client polls /api/video/process/tick
-    await startVideoProcessing(payload);
+    await triggerBackgroundProcessing(
+      payload.videoId,
+      payload.source,
+      payload.ownerId
+    );
     return;
   }
 
@@ -26,4 +32,9 @@ export async function enqueueVideoProcessingJob(payload: ProcessingJobPayload): 
   });
 
   await sqsClient.send(command);
+  await triggerBackgroundProcessing(
+    payload.videoId,
+    payload.source,
+    payload.ownerId
+  );
 }

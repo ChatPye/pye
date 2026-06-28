@@ -1,4 +1,4 @@
-import { eq, and, gte, ne, sql } from 'drizzle-orm'
+import { eq, and, gte, ne, notInArray, asc, sql } from 'drizzle-orm'
 import { connectDocumentDB } from '@/server/db/documentdb'
 import { VideoProcess } from '@/data/models/VideoProcess'
 import type { ProcessingStatus } from '@/data/models/VideoProcess'
@@ -225,6 +225,50 @@ export async function countVideosByOwnerSince(
 
 export async function getVideoForSearch(videoId: string): Promise<VideoRecord | null> {
   return findVideoByExternalId(videoId)
+}
+
+const ACTIVE_PROCESSING_STATUSES = [
+  'queued',
+  'pending',
+  'extracting',
+  'transcribing',
+  'embedding',
+] as const
+
+/** Videos awaiting backend worker (for Vercel cron / recovery). */
+export async function listVideosPendingProcessing(limit = 10): Promise<VideoRecord[]> {
+  if (useAuroraForVideos()) {
+    try {
+      const db = getDb()
+      const rows = await db
+        .select()
+        .from(schema.videos)
+        .where(
+          notInArray(schema.videos.processingStatus, ['complete', 'failed'])
+        )
+        .orderBy(asc(schema.videos.updatedAt))
+        .limit(limit)
+      return rows.map(rowToVideoRecord)
+    } catch (error) {
+      logger.error(
+        'listVideosPendingProcessing failed',
+        error instanceof Error ? error : new Error(String(error))
+      )
+      return []
+    }
+  }
+
+  if (await useMongoForVideos()) {
+    const docs = await VideoProcess.find({
+      processingStatus: { $in: [...ACTIVE_PROCESSING_STATUSES] },
+    })
+      .sort({ updatedAt: 1 })
+      .limit(limit)
+      .lean()
+    return docs as unknown as VideoRecord[]
+  }
+
+  return []
 }
 
 export { processingStatusToDbStatus }

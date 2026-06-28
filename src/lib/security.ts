@@ -152,6 +152,9 @@ export function checkDDoSProtection(request: NextRequest, headers?: Headers): {
   if (pathname === '/api/video/process' || pathname.startsWith('/api/video/process/')) {
     return { allowed: true };
   }
+  if (pathname === '/api/cron/video-process') {
+    return { allowed: true };
+  }
   if (/^\/api\/video\/[^/]+$/.test(pathname) && request.method === 'GET') {
     return { allowed: true };
   }

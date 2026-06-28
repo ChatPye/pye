@@ -22,6 +22,8 @@ export type ProcessingJobPayload = {
   videoId: string;
   ownerId: string | null;
   source: 'youtube' | 'upload';
+  /** Backend worker bypasses short client lock */
+  force?: boolean;
 };
 
 type ProcessingMeta = {
@@ -105,7 +107,7 @@ export async function startVideoProcessing(payload: ProcessingJobPayload): Promi
 export async function advanceVideoProcessing(
   payload: ProcessingJobPayload
 ): Promise<{ status: ProcessingStatus; error?: string; progress?: number }> {
-  const { videoId, source } = payload;
+  const { videoId, source, force = false } = payload;
   let record = await findVideoByExternalId(videoId);
 
   if (!record) {
@@ -124,15 +126,17 @@ export async function advanceVideoProcessing(
 
   const meta = parseMeta(record.transcriptRef ?? null);
   const lockUntil = meta.tickLockUntil ?? 0;
-  if (lockUntil > Date.now()) {
+  if (!force && lockUntil > Date.now()) {
     return {
       status,
       progress: progressFor(status),
     };
   }
 
-  const lockMeta = { ...meta, tickLockUntil: Date.now() + 150_000 };
-  await saveMeta(videoId, record, lockMeta);
+  if (!force) {
+    const lockMeta = { ...meta, tickLockUntil: Date.now() + 45_000 };
+    await saveMeta(videoId, record, lockMeta);
+  }
 
   try {
     if (source === 'youtube') {
@@ -147,10 +151,12 @@ export async function advanceVideoProcessing(
     await updateVideoStatus(videoId, 'failed', message);
     return { status: 'failed', error: message };
   } finally {
-    const latest = await findVideoByExternalId(videoId);
-    if (latest) {
-      const cleared = { ...parseMeta(latest.transcriptRef ?? null), tickLockUntil: 0 };
-      await saveMeta(videoId, latest, cleared);
+    if (!force) {
+      const latest = await findVideoByExternalId(videoId);
+      if (latest) {
+        const cleared = { ...parseMeta(latest.transcriptRef ?? null), tickLockUntil: 0 };
+        await saveMeta(videoId, latest, cleared);
+      }
     }
   }
 }
@@ -238,8 +244,8 @@ async function advanceUploadProcessing(
     }
 
     const poll = await audioTranscriptionService.pollJobUntilDone(meta.transcribeJobId, {
-      maxWaitMs: 120_000,
-      pollIntervalMs: 4_000,
+      maxWaitMs: 50_000,
+      pollIntervalMs: 3_000,
     });
 
     if (poll.status === 'pending') {

@@ -63,7 +63,6 @@ function WorkspaceVideoPage() {
   const [processingProgress, setProcessingProgress] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
   const notifiedRef = useRef(false);
-  const tickInFlightRef = useRef(false);
 
   const rawVideoId = useMemo(
     () => (params?.videoId ? decodeURIComponent(params.videoId) : undefined),
@@ -101,10 +100,23 @@ function WorkspaceVideoPage() {
   const fetchStatus = useCallback(async (): Promise<boolean> => {
     if (!rawVideoId) return true;
     try {
-      const response = await fetch(
-        `/api/video/process?videoId=${encodeURIComponent(rawVideoId)}`,
-        { credentials: 'include' }
-      );
+      const [statusRes, jobRes] = await Promise.all([
+        fetch(`/api/video/process?videoId=${encodeURIComponent(rawVideoId)}`, {
+          credentials: 'include',
+        }),
+        fetch(`/api/video/${encodeURIComponent(rawVideoId)}/job`, {
+          credentials: 'include',
+        }),
+      ]);
+
+      if (jobRes.ok) {
+        const job = await jobRes.json().catch(() => null);
+        if (typeof job?.progress === 'number') {
+          setProcessingProgress(job.progress);
+        }
+      }
+
+      const response = statusRes;
 
       if (!response.ok) {
         if (response.status === 429) {
@@ -163,55 +175,14 @@ function WorkspaceVideoPage() {
     }
   }, [rawVideoId]);
 
-  const runProcessingTick = useCallback(async () => {
-    if (!rawVideoId || tickInFlightRef.current) return false;
-    tickInFlightRef.current = true;
-    try {
-      const response = await fetch('/api/video/process/tick', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ videoId: rawVideoId, source: resolvedSource }),
-      });
-      if (response.status === 429) {
-        return false;
-      }
-      const data = await response.json().catch(() => ({}));
-      if (typeof data.progress === 'number') {
-        setProcessingProgress(data.progress);
-      }
-      if (data.video) {
-        setVideoRecord(data.video);
-      }
-      if (data.status === 'complete') {
-        setIsProcessing(false);
-        setProcessingError(null);
-        setProcessingProgress(100);
-        if (!notifiedRef.current && NotificationService.getSupported()) {
-          NotificationService.requestPermission().then((granted) => {
-            if (granted) {
-              NotificationService.showProcessingComplete(
-                rawVideoId,
-                data.video?.title
-              );
-            }
-          });
-          notifiedRef.current = true;
-        }
-        return true;
-      }
-      if (data.status === 'failed') {
-        setProcessingError(data.error || 'Processing failed');
-        setIsProcessing(false);
-        return true;
-      }
-      return false;
-    } catch (error) {
-      console.error('Processing tick failed', error);
-      return false;
-    } finally {
-      tickInFlightRef.current = false;
-    }
+  const queueServerProcessing = useCallback(async () => {
+    if (!rawVideoId) return;
+    await fetch('/api/video/process/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ videoId: rawVideoId, source: resolvedSource }),
+    }).catch(() => null);
   }, [rawVideoId, resolvedSource]);
 
   const handleRetryProcessing = useCallback(async () => {
@@ -225,8 +196,8 @@ function WorkspaceVideoPage() {
       credentials: 'include',
       body: JSON.stringify({ videoId: rawVideoId, source: resolvedSource, retry: true }),
     }).catch(() => null);
-    await runProcessingTick();
-  }, [rawVideoId, resolvedSource, runProcessingTick]);
+    await queueServerProcessing();
+  }, [rawVideoId, resolvedSource, queueServerProcessing]);
 
   useEffect(() => {
     if (!rawVideoId) return;
@@ -248,19 +219,17 @@ function WorkspaceVideoPage() {
 
       if (cancelled) return;
 
-      await runProcessingTick();
+      await queueServerProcessing();
       const done = await fetchStatus();
       if (done || cancelled) return;
 
       pollTimer = setInterval(async () => {
-        if (tickInFlightRef.current) return;
-        await runProcessingTick();
         const finished = await fetchStatus();
         if (finished && pollTimer) {
           clearInterval(pollTimer);
           pollTimer = null;
         }
-      }, 12000);
+      }, 5000);
     };
 
     bootstrap();
@@ -269,7 +238,7 @@ function WorkspaceVideoPage() {
       cancelled = true;
       if (pollTimer) clearInterval(pollTimer);
     };
-  }, [rawVideoId, resolvedSource, fetchStatus, runProcessingTick]);
+  }, [rawVideoId, resolvedSource, fetchStatus, queueServerProcessing]);
 
   if (!rawVideoId) {
     return (
