@@ -11,7 +11,7 @@ import {
 import type { ProcessingStatus, VideoProcessDocument } from '@/data/models/VideoProcess'
 import { isUploadVideoId } from '@/lib/video-upload-utils'
 import { sanitizeVideoForClient } from '@/lib/video/client-video'
-import { triggerBackgroundProcessing } from '@/lib/video/trigger-processing'
+import { scheduleVideoProcessing } from '@/lib/video/schedule-processing'
 import { processingProgressFor } from '@/services/video-processor/staged-worker'
 
 type SourceType = 'youtube' | 'upload'
@@ -132,11 +132,11 @@ export async function POST(request: NextRequest) {
         processingStatus: resumeStatus,
         errorMessage: undefined,
       });
-      await triggerBackgroundProcessing(
+      scheduleVideoProcessing({
         videoId,
-        (existingVideo.source as SourceType) || source,
-        authUser.id
-      );
+        ownerId: authUser.id,
+        source: (existingVideo.source as SourceType) || source,
+      });
     }
 
     if (existingVideo) {
@@ -159,11 +159,11 @@ export async function POST(request: NextRequest) {
           source: (existingVideo.source as SourceType) || source,
         })
       } else {
-        await triggerBackgroundProcessing(
+        scheduleVideoProcessing({
           videoId,
-          (existingVideo.source as SourceType) || source,
-          authUser.id
-        )
+          ownerId: authUser.id,
+          source: (existingVideo.source as SourceType) || source,
+        })
       }
 
       return NextResponse.json<StatusResponse>({

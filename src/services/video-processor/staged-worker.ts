@@ -415,4 +415,35 @@ function progressFor(status: ProcessingStatus): number {
   return map[status] ?? 20;
 }
 
+/** Progress for job status API (uses meta when available). */
+export function computeVideoProgress(record: {
+  processingStatus?: string | null;
+  transcriptRef?: string | null;
+  transcript?: unknown[] | null;
+}): number {
+  const status = (record.processingStatus || 'queued') as ProcessingStatus;
+  if (status === 'complete') return 100;
+  if (status === 'failed') return 0;
+
+  let meta: ProcessingMeta = {};
+  if (record.transcriptRef?.trim().startsWith('{')) {
+    try {
+      meta = JSON.parse(record.transcriptRef) as ProcessingMeta;
+    } catch {
+      meta = {};
+    }
+  }
+
+  if (status === 'transcribing') return 40;
+  if (status === 'embedding' && meta.embeddingOffset != null) {
+    const transcriptLen = record.transcript?.length ?? 0;
+    if (transcriptLen > 0) {
+      return 55 + Math.min(33, Math.round((meta.embeddingOffset / transcriptLen) * 33));
+    }
+    return 72;
+  }
+
+  return progressFor(status);
+}
+
 export { progressFor as processingProgressFor };

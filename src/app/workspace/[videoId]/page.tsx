@@ -97,6 +97,18 @@ function WorkspaceVideoPage() {
     []
   );
 
+  const lastKickRef = useRef(0);
+
+  const queueServerProcessing = useCallback(async () => {
+    if (!rawVideoId) return;
+    await fetch('/api/video/process/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ videoId: rawVideoId, source: resolvedSource }),
+    }).catch(() => null);
+  }, [rawVideoId, resolvedSource]);
+
   const fetchStatus = useCallback(async (): Promise<boolean> => {
     if (!rawVideoId) return true;
     try {
@@ -163,6 +175,13 @@ function WorkspaceVideoPage() {
         }
 
         setIsProcessing(true);
+        // Re-kick server worker if stuck at pending/queued (every 60s)
+        const stuck = status === 'pending' || status === 'queued';
+        const now = Date.now();
+        if (stuck && now - lastKickRef.current > 60_000) {
+          lastKickRef.current = now;
+          void queueServerProcessing();
+        }
         return false;
       }
 
@@ -173,17 +192,7 @@ function WorkspaceVideoPage() {
       console.error('Video status poll failed', error);
       return false;
     }
-  }, [rawVideoId]);
-
-  const queueServerProcessing = useCallback(async () => {
-    if (!rawVideoId) return;
-    await fetch('/api/video/process/start', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ videoId: rawVideoId, source: resolvedSource }),
-    }).catch(() => null);
-  }, [rawVideoId, resolvedSource]);
+  }, [rawVideoId, queueServerProcessing]);
 
   const handleRetryProcessing = useCallback(async () => {
     if (!rawVideoId) return;

@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { findVideoByExternalId } from '@/lib/db/video-repository';
-import { triggerBackgroundProcessing } from '@/lib/video/trigger-processing';
+import { scheduleVideoProcessing } from '@/lib/video/schedule-processing';
 import { startVideoProcessing } from '@/services/video-processor/staged-worker';
 
-/** User-facing: queue backend worker after upload or retry (no browser tick required). */
+export const maxDuration = 300;
+
+/** Queue server-side processing (runs via after() — no CRON_SECRET required). */
 export async function POST(request: NextRequest) {
   try {
     const authUser = await requireAuth();
@@ -35,12 +37,16 @@ export async function POST(request: NextRequest) {
       source: resolvedSource,
     });
 
-    await triggerBackgroundProcessing(videoId, resolvedSource, authUser.id);
+    scheduleVideoProcessing({
+      videoId,
+      ownerId: authUser.id,
+      source: resolvedSource,
+    });
 
     return NextResponse.json({
       success: true,
       videoId,
-      message: 'Processing queued on server',
+      message: 'Processing started on server',
     });
   } catch (error) {
     return NextResponse.json(

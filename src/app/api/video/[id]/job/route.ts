@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { findVideoByExternalId } from '@/lib/db/video-repository';
-import { processingProgressFor } from '@/services/video-processor/staged-worker';
+import { computeVideoProgress } from '@/services/video-processor/staged-worker';
 import type { ProcessingStatus } from '@/data/models/VideoProcess';
 
 /** Simple job status (media-search-engine: 0=failed, 1=pending, 2=complete). */
@@ -20,13 +20,14 @@ export async function GET(
 
     const status = (record.processingStatus || 'queued') as ProcessingStatus;
     const jobCode = status === 'complete' ? 2 : status === 'failed' ? 0 : 1;
+    const progress = computeVideoProgress(record);
 
     return NextResponse.json({
       success: true,
       job_id: id,
       status: jobCode,
       processingStatus: status,
-      progress: processingProgressFor(status),
+      progress,
       errorMessage: record.errorMessage,
       chatReady: status === 'complete' && (record.transcript?.length ?? 0) > 0,
     });
