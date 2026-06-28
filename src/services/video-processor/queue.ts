@@ -1,4 +1,5 @@
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
+import { after } from 'next/server';
 import { triggerVideoProcessing } from './worker';
 
 export interface ProcessingJobPayload {
@@ -20,6 +21,17 @@ export async function enqueueVideoProcessingJob(payload: ProcessingJobPayload): 
     !sqsClient;
 
   if (shouldBypassQueue) {
+    if (process.env.VERCEL === '1') {
+      after(async () => {
+        try {
+          await triggerVideoProcessing(payload);
+        } catch (error) {
+          console.error('[VideoProcessor] Background job failed', error);
+        }
+      });
+      return;
+    }
+
     await triggerVideoProcessing(payload);
     return;
   }

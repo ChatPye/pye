@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useCallback, useRef, useEffect, ChangeEvent } from 'react'
 import { createClip, createSnip, requestChapters, getChapters } from '@/lib/video-actions'
+import { uploadVideoFile } from '@/lib/upload-video'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import Image from 'next/image'
@@ -1735,36 +1736,68 @@ function WorkspaceLanding({
   onComposerChange: (value: string) => void
   onSubmit: (args: LoginSource) => void
 }) {
+  const router = useRouter()
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isFileAttached, setIsFileAttached] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const isValidUrl = composerValue.trim().length > 0
 
   const handleFileSelect = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
+      setSelectedFile(file)
       setIsFileAttached(true)
+      setUploadError('')
       onComposerChange(file.name)
     }
   }, [onComposerChange])
 
   const handleSubmit = useCallback(async () => {
+    if (isUploading) return
+
+    if (selectedFile) {
+      setIsUploading(true)
+      setUploadError('')
+      try {
+        const result = await uploadVideoFile(
+          selectedFile,
+          selectedFile.name.replace(/\.[^/.]+$/, '')
+        )
+
+        if (!result.success || !result.videoId) {
+          setUploadError(result.error || 'Upload failed. Please try again.')
+          return
+        }
+
+        router.push(`/workspace/${encodeURIComponent(result.videoId)}?source=upload`)
+      } catch (err) {
+        setUploadError(err instanceof Error ? err.message : 'Upload failed')
+      } finally {
+        setIsUploading(false)
+      }
+      return
+    }
+
     if (!isValidUrl) return
     const trimmed = composerValue.trim()
     const isYoutube = /youtube\.com|youtu\.be/.test(trimmed)
-    const source = isYoutube ? 'youtube' : 'upload'
-    
-    // Extract video ID from YouTube URL
-    let videoId = trimmed
-    if (isYoutube) {
-      const youtubeRegex = /(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
-      const match = trimmed.match(youtubeRegex)
-      if (match && match[1]) {
-        videoId = match[1]
-      }
+    if (!isYoutube) {
+      setUploadError('Attach a video file with the paperclip, or paste a YouTube URL.')
+      return
     }
-    
+
+    const source = 'youtube'
+    let videoId = trimmed
+    const youtubeRegex = /(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
+    const match = trimmed.match(youtubeRegex)
+    if (match?.[1]) {
+      videoId = match[1]
+    }
+
     onSubmit({ source: 'hero', videoId, query: { source } })
-  }, [composerValue, isValidUrl, onSubmit])
+  }, [composerValue, isValidUrl, isUploading, onSubmit, router, selectedFile])
 
   return (
     <div className="px-6 py-16">
@@ -1801,26 +1834,29 @@ function WorkspaceLanding({
               </button>
               <button
                 type="button"
-                disabled={!isValidUrl}
+                disabled={(!isValidUrl && !selectedFile) || isUploading}
                 onClick={handleSubmit}
                 className={cx(
                   'pointer-events-auto inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-semibold transition',
-                  isValidUrl
+                  (isValidUrl || selectedFile) && !isUploading
                     ? 'bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-500 text-black hover:opacity-90'
                     : 'bg-white/10 text-white/40 cursor-not-allowed'
                 )}
               >
-                Start learning
+                {isUploading ? 'Uploading…' : 'Start learning'}
               </button>
             </div>
             <input
               ref={fileInputRef}
               type="file"
               className="hidden"
-              accept="video/*,application/pdf"
+              accept="video/mp4,video/webm,video/quicktime,video/x-msvideo,video/avi,.mp4,.webm,.mov,.avi"
               onChange={handleFileSelect}
             />
           </div>
+          {uploadError && (
+            <p className="mt-3 text-sm text-rose-400">{uploadError}</p>
+          )}
           <div className="mt-2 text-center text-[11px] text-white/60">
             or <Link href="/pods/new" className="underline underline-offset-2 text-white hover:text-white/80">create pod</Link>
             <br />

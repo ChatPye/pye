@@ -66,6 +66,7 @@ export default function Hero() {
     }
 
     if (!isSignedIn) {
+      setError('Sign in first — then select your video again and click Start learning.');
       redirectToSignIn({
         source: 'hero',
         query: { source: 'upload' },

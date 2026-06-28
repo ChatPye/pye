@@ -282,7 +282,8 @@ Legacy ECS workflows are disabled (`*.disabled`).
 | Sign-in page spins forever / no widget | Invalid `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` — copy full key from Clerk API Keys; add Vercel domain in Clerk Domains |
 | Sign in / Sign up missing in nav | Redeploy after auth fix; keys must be valid so `ClerkProvider` mounts |
 | DB connection timeout | Aurora SG must allow your IP or use Vercel + [Vercel Postgres alternative] or RDS Proxy |
-| Upload fails | Check S3 CORS + IAM keys on Vercel |
+| Upload fails | Check S3 CORS + IAM keys on Vercel. Apply CORS: `aws s3api put-bucket-cors --bucket YOUR_BUCKET --cors-configuration file://scripts/deploy/s3-cors.json` |
+| Storage upload failed (403/CORS) | Add your Vercel URL to `scripts/deploy/s3-cors.json` → AllowedOrigins, then re-apply CORS |
 | HR dashboard 403 | Set Clerk `publicMetadata.role = "hr"` |
 
 ### Aurora + Vercel networking

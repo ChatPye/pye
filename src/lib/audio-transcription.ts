@@ -1,5 +1,6 @@
-import { TranscribeClient, StartTranscriptionJobCommand, GetTranscriptionJobCommand } from '@aws-sdk/client-transcribe';
+import { TranscribeClient, StartTranscriptionJobCommand, GetTranscriptionJobCommand, type MediaFormat } from '@aws-sdk/client-transcribe';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getTranscribeMediaFormat } from '@/lib/video-upload-utils';
 
 // Audio Transcription Service for YouTube Extension
 export class AudioTranscriptionService {
@@ -8,13 +9,10 @@ export class AudioTranscriptionService {
   private bucketName: string;
 
   constructor() {
-    this.transcribeClient = new TranscribeClient({
-      region: process.env.AWS_REGION || 'us-west-2',
-    });
-    
-    this.s3Client = new S3Client({
-      region: process.env.AWS_REGION || 'us-west-2',
-    });
+    const region = process.env.AWS_REGION || 'us-east-1';
+
+    this.transcribeClient = new TranscribeClient({ region });
+    this.s3Client = new S3Client({ region });
     
     this.bucketName = process.env.AWS_S3_BUCKET || 'chatpye-audio-transcriptions';
   }
@@ -139,7 +137,7 @@ export class AudioTranscriptionService {
         Media: {
           MediaFileUri: `s3://${this.bucketName}/${s3Key}`,
         },
-        MediaFormat: 'mp3',
+        MediaFormat: getTranscribeMediaFormat(s3Key) as MediaFormat,
         LanguageCode: 'en-US',
         OutputBucketName: this.bucketName,
         OutputKey: `transcripts/${jobId}.json`,

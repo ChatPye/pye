@@ -1,0 +1,14 @@
+{
+  "CORSRules": [
+    {
+      "AllowedHeaders": ["*"],
+      "AllowedMethods": ["GET", "PUT", "HEAD"],
+      "AllowedOrigins": [
+        "https://chatpye-web.vercel.app",
+        "http://localhost:3000"
+      ],
+      "ExposeHeaders": ["ETag"],
+      "MaxAgeSeconds": 3600
+    }
+  ]
+}

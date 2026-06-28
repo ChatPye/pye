@@ -11,6 +11,7 @@ import {
   persistVideoRecord,
 } from '@/lib/db/video-repository'
 import type { ProcessingStatus, VideoProcessDocument } from '@/data/models/VideoProcess'
+import { isUploadVideoId } from '@/lib/video-upload-utils'
 
 type SourceType = 'youtube' | 'upload'
 
@@ -48,6 +49,16 @@ export async function POST(request: NextRequest) {
     if (!videoId) {
       return NextResponse.json<StatusResponse>(
         { success: false, error: 'Video ID is required' },
+        { status: 400 }
+      )
+    }
+
+    if (source === 'upload' && !isUploadVideoId(videoId)) {
+      return NextResponse.json<StatusResponse>(
+        {
+          success: false,
+          error: 'Invalid upload. Attach your video file — filenames cannot be used as video IDs.',
+        },
         { status: 400 }
       )
     }
@@ -111,6 +122,17 @@ export async function POST(request: NextRequest) {
           success: true,
           video: existingVideo,
           cached: true,
+        })
+      }
+
+      const stuckStatuses: ProcessingStatus[] = ['queued', 'pending', 'failed']
+      if (
+        stuckStatuses.includes(existingVideo.processingStatus as ProcessingStatus)
+      ) {
+        await enqueueVideoProcessingJob({
+          videoId,
+          ownerId: authUser.id,
+          source: (existingVideo.source as SourceType) || source,
         })
       }
 

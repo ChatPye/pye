@@ -5,6 +5,12 @@ import { enqueueVideoProcessingJob } from '@/services/video-processor/queue';
 import { persistVideoRecord } from '@/lib/db/video-repository';
 import { recordLearningEvent } from '@/lib/db/learning-events';
 import { logger } from '@/lib/logger';
+import {
+  buildUploadS3Key,
+  generateUploadVideoId,
+  MAX_UPLOAD_BYTES,
+  resolveVideoContentType,
+} from '@/lib/video-upload-utils';
 
 const s3Client = process.env.AWS_REGION ? new S3Client({ 
   region: process.env.AWS_REGION || 'us-east-1' 
@@ -12,26 +18,10 @@ const s3Client = process.env.AWS_REGION ? new S3Client({
 
 const BUCKET_NAME = process.env.S3_BUCKET_NAME || process.env.AWS_S3_BUCKET || 'chatpye-videos';
 
-/**
- * Generate unique video ID for uploaded videos
- */
-function generateVideoId(): string {
-  return `upload_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-}
-
-/**
- * Compress video using ffmpeg (if available) or return original
- * For now, we'll upload as-is and handle compression in processing
- */
-async function compressVideo(buffer: Buffer, filename: string): Promise<Buffer> {
-  // TODO: Integrate ffmpeg for actual compression
-  // For now, just validate and return original
-  // In production, use ffmpeg to compress to reasonable quality/size
-  const maxSize = 500 * 1024 * 1024; // 500MB limit
-  if (buffer.length > maxSize) {
-    throw new Error(`Video file too large. Maximum size is ${maxSize / 1024 / 1024}MB`);
+async function compressVideo(buffer: Buffer): Promise<Buffer> {
+  if (buffer.length > MAX_UPLOAD_BYTES) {
+    throw new Error(`Video file too large. Maximum size is ${MAX_UPLOAD_BYTES / 1024 / 1024}MB`);
   }
-  
   return buffer;
 }
 
@@ -54,18 +44,15 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Validate file type
-    const validTypes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo', 'video/avi'];
-    if (!validTypes.includes(file.type)) {
+    const contentType = resolveVideoContentType(file.name, file.type);
+    if (!contentType) {
       return NextResponse.json({ 
         success: false, 
-        error: `Invalid file type. Supported: ${validTypes.join(', ')}` 
+        error: 'Invalid file type. Supported: MP4, WebM, MOV, AVI' 
       }, { status: 400 });
     }
 
-    // Generate video ID
-    const videoId = generateVideoId();
-    const fileExtension = file.name.split('.').pop() || 'mp4';
+    const videoId = generateUploadVideoId();
     
     logger.info('Uploading video', { 
       videoId, 
@@ -79,18 +66,18 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(arrayBuffer);
 
     // Compress if needed (placeholder for now)
-    const processedBuffer = await compressVideo(buffer, file.name);
+    const processedBuffer = await compressVideo(buffer);
 
     // Upload to S3
     if (s3Client) {
-      const s3Key = `videos/${authUser.id}/${videoId}.${fileExtension}`;
+      const s3Key = buildUploadS3Key(authUser.id, videoId, file.name);
       const thumbnailKey = `videos/${authUser.id}/${videoId}_thumb.jpg`; // Will be generated during processing
       
       const uploadCommand = new PutObjectCommand({
         Bucket: BUCKET_NAME,
         Key: s3Key,
         Body: processedBuffer,
-        ContentType: file.type,
+        ContentType: contentType,
         Metadata: {
           originalName: file.name,
           uploadedBy: authUser.id,

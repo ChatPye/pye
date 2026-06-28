@@ -1,8 +1,10 @@
 'use client';
 
 import { useMemo, useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import WorkspaceShell from '@/components/workspace/WorkspaceShell';
+import { isUploadVideoId } from '@/lib/video-upload-utils';
 
 type TranscriptSegment = {
   text: string;
@@ -173,6 +175,22 @@ export default function WorkspacePage() {
 
   if (!rawVideoId) {
     return <div className="min-h-screen bg-black text-white flex items-center justify-center">Video not found.</div>;
+  }
+
+  if (source === 'upload' && !isUploadVideoId(rawVideoId)) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center px-6">
+        <div className="text-center space-y-4 max-w-md">
+          <h1 className="text-2xl font-semibold">Video not uploaded</h1>
+          <p className="text-zinc-400">
+            &ldquo;{rawVideoId}&rdquo; is a filename, not an uploaded video. Use Attach to upload your file, or start from the home page.
+          </p>
+          <Link href="/workspace" className="inline-block text-blue-400 hover:text-blue-300">
+            Back to workspace
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   if (loadError) {
