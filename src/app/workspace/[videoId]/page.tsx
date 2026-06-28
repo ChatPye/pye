@@ -1,10 +1,12 @@
 'use client';
 
-import { Suspense, useMemo, useEffect, useState, useCallback } from 'react';
+import { Suspense, useMemo, useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import WorkspaceShell from '@/components/workspace/WorkspaceShell';
+import NotificationPrompt from '@/components/workspace/NotificationPrompt';
 import { isUploadVideoId } from '@/lib/video-upload-utils';
+import { NotificationService } from '@/lib/notifications';
 
 type TranscriptSegment = {
   text: string;
@@ -59,6 +61,7 @@ function WorkspaceVideoPage() {
   const [processingError, setProcessingError] = useState<string | null>(null);
   const [processingProgress, setProcessingProgress] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const notifiedRef = useRef(false);
 
   const rawVideoId = useMemo(
     () => (params?.videoId ? decodeURIComponent(params.videoId) : undefined),
@@ -117,6 +120,17 @@ function WorkspaceVideoPage() {
           setIsProcessing(false);
           setProcessingError(null);
           setProcessingProgress(100);
+          if (!notifiedRef.current && NotificationService.getSupported()) {
+            NotificationService.requestPermission().then((granted) => {
+              if (granted) {
+                NotificationService.showProcessingComplete(
+                  rawVideoId,
+                  data.video.title
+                );
+              }
+            });
+            notifiedRef.current = true;
+          }
           return true;
         }
 
@@ -163,6 +177,17 @@ function WorkspaceVideoPage() {
         setIsProcessing(false);
         setProcessingError(null);
         setProcessingProgress(100);
+        if (!notifiedRef.current && NotificationService.getSupported()) {
+          NotificationService.requestPermission().then((granted) => {
+            if (granted) {
+              NotificationService.showProcessingComplete(
+                rawVideoId,
+                data.video?.title
+              );
+            }
+          });
+          notifiedRef.current = true;
+        }
         return true;
       }
       if (data.status === 'failed') {
@@ -286,7 +311,9 @@ function WorkspaceVideoPage() {
     : undefined;
 
   return (
-    <WorkspaceShell
+    <>
+      <NotificationPrompt enabled={isProcessing} videoId={rawVideoId} />
+      <WorkspaceShell
       videoId={rawVideoId}
       videoTitle={videoRecord?.title}
       source={resolvedSource}
@@ -304,5 +331,6 @@ function WorkspaceVideoPage() {
       summary={videoRecord?.summary}
       keyPoints={videoRecord?.keyPoints}
     />
+    </>
   );
 }

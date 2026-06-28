@@ -14,8 +14,9 @@ import {
   updateVideoProcessingResult,
 } from '@/lib/db/video-repository';
 import type { VideoRecord } from '@/lib/db/video-types';
+import { prepareTranscriptionMedia } from '@/lib/video/media-prep';
 
-const EMBED_BATCH = 25;
+const EMBED_BATCH = 40;
 
 export type ProcessingJobPayload = {
   videoId: string;
@@ -25,6 +26,8 @@ export type ProcessingJobPayload = {
 
 type ProcessingMeta = {
   transcribeJobId?: string;
+  transcriptionS3Key?: string;
+  audioExtracted?: boolean;
   embeddingOffset?: number;
   useConsolidated?: boolean;
   phase?: 'embed' | 'summarize';
@@ -173,7 +176,20 @@ async function advanceUploadProcessing(
       return { status: 'failed', error: 'No S3 file for this upload' };
     }
 
-    const jobId = await audioTranscriptionService.startJobForS3Key(videoId, s3Key);
+    let transcriptionKey = meta.transcriptionS3Key;
+    if (!transcriptionKey) {
+      const prep = await prepareTranscriptionMedia(videoId, s3Key);
+      transcriptionKey = prep.transcriptionKey;
+      meta.transcriptionS3Key = transcriptionKey;
+      meta.audioExtracted = prep.usedAudioExtract;
+      await saveMeta(videoId, record, meta);
+    }
+
+    const jobId = await audioTranscriptionService.startJobForS3Key(
+      videoId,
+      transcriptionKey,
+      { fastMode: true }
+    );
     meta.transcribeJobId = jobId;
     meta.embeddingOffset = 0;
     await updateVideoStatus(videoId, 'transcribing');

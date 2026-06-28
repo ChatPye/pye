@@ -30,3 +30,8 @@ next-env.d.ts
 /coverage
 /test-results/
 /playwright-report/
+
+# lambda deploy artifacts
+/lambda/**/node_modules/
+/lambda/**/dist.zip
+/lambda/**/dist/

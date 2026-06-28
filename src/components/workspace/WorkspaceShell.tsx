@@ -49,6 +49,8 @@ import {
 import Background from '@/components/Background'
 import WorkspaceHeader from '@/components/workspace/WorkspaceHeader'
 import VideoPlayer from '@/components/workspace/VideoPlayer'
+import LearningSetupExperience from '@/components/workspace/LearningSetupExperience'
+import { getProcessingStatusLabel as formatProcessingLabel } from '@/lib/processing-labels'
 const VideoDetails = dynamic(() => import('@/components/workspace/VideoDetails'), { ssr: false, loading: () => null })
 const CommunityThreads = dynamic(() => import('@/components/workspace/CommunityThreads'), { ssr: false, loading: () => null })
 const ResourcesList = dynamic(() => import('@/components/workspace/ResourcesList'), { ssr: false, loading: () => null })
@@ -230,25 +232,8 @@ function describeProcessingStatus(status?: ProcessingStatus | string | null): st
   return 'processing'
 }
 
-function getProcessingStatusLabel(status: ProcessingStatus): string {
-  switch (status) {
-    case 'queued':
-      return 'Queued for processing... (max 3 hours)'
-    case 'pending':
-      return 'Preparing pipeline...'
-    case 'extracting':
-      return 'Extracting audio and frames...'
-    case 'transcribing':
-      return 'Transcribing audio...'
-    case 'embedding':
-      return 'Computing embeddings...'
-    case 'complete':
-      return 'Processing complete'
-    case 'failed':
-      return 'Processing failed'
-    default:
-      return 'Processing video...'
-  }
+function getProcessingStatusLabel(status: ProcessingStatus, progress?: number): string {
+  return formatProcessingLabel(status, progress)
 }
 
 const cx = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' ')
@@ -580,6 +565,11 @@ export default function WorkspaceShell({
 
     if (processingStatus === 'complete' && previousStatus !== 'complete') {
       addAssistantMessage('Great news! The video is processed and ready for questions. Ask me anything about it!')
+      fetch('/api/competencies/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoId }),
+      }).catch(() => null)
     }
 
     if (processingStatus === 'failed' && previousStatus !== 'failed') {
@@ -587,7 +577,7 @@ export default function WorkspaceShell({
     }
 
     prevProcessingStatusRef.current = processingStatus
-  }, [processingStatus, addAssistantMessage])
+  }, [processingStatus, addAssistantMessage, videoId])
 
   // Generate AI metadata for uploads once processing is complete
   useEffect(() => {
@@ -1314,6 +1304,7 @@ export default function WorkspaceShell({
                         progress={processingProgress}
                         error={processingError}
                         onRetry={onRetryProcessing}
+                        videoId={videoId}
                       />
                     )}
 
@@ -1452,6 +1443,7 @@ export default function WorkspaceShell({
                           progress={processingProgress}
                           error={processingError}
                           onRetry={onRetryProcessing}
+                          videoId={videoId}
                         />
                       )}
 
@@ -1873,9 +1865,7 @@ function WorkspaceLanding({
           selectedFile.name.replace(/\.[^/.]+$/, ''),
           (pct, stage) => {
             setUploadProgress(pct)
-            setUploadStage(
-              stage === 'uploading' ? 'Uploading to secure storage…' : 'Finalizing upload…'
-            )
+            setUploadStage(stage)
           }
         )
 
@@ -1971,21 +1961,16 @@ function WorkspaceLanding({
             <p className="mt-3 text-sm text-rose-400">{uploadError}</p>
           )}
           {isUploading && (
-            <div className="mt-3 space-y-2">
-              <p className="text-xs text-zinc-400">{uploadStage || 'Uploading…'}</p>
-              <div className="h-1.5 overflow-hidden rounded-full bg-zinc-800">
-                <div
-                  className="h-full bg-emerald-400 transition-all duration-300"
-                  style={{ width: `${uploadProgress}%` }}
-                />
-              </div>
-              <p className="text-[11px] text-zinc-500">{uploadProgress}%</p>
+            <div className="mt-4">
+              <LearningSetupExperience
+                mode="upload"
+                progress={uploadProgress}
+                stage={uploadStage || 'uploading'}
+              />
             </div>
           )}
           <div className="mt-2 text-center text-[11px] text-white/60">
             or <Link href="/pods/new" className="underline underline-offset-2 text-white hover:text-white/80">create pod</Link>
-            <br />
-            Max supported video length is 2 hours.
             <br />
             Supports YouTube URLs, MP4/MOV/AVI, and PDF files.
           </div>
@@ -1994,7 +1979,7 @@ function WorkspaceLanding({
         <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/60">
           <Info className="mb-2 h-5 w-5 text-white/50" />
           <p>Your content will be processed with AI to generate personalised study materials.</p>
-          <p className="mt-1 text-xs text-white/40">Processing typically takes 2-5 minutes depending on content length.</p>
+          <p className="mt-1 text-xs text-white/40">We&apos;ll notify you when processing is done — progress shown as a percentage.</p>
         </div>
       </div>
     </div>
@@ -2846,43 +2831,44 @@ function ProcessingBanner({
   progress,
   error,
   onRetry,
+  videoId,
 }: {
   status?: ProcessingStatus
   progress?: number
   error?: string | null
   onRetry?: () => void
+  videoId?: string
 }) {
   const isFailed = status === 'failed' || Boolean(error)
   const pct = Math.min(100, Math.max(0, progress ?? 0))
 
-  return (
-    <div
-      className={cx(
-        'rounded-xl border px-4 py-3 text-sm',
-        isFailed ? 'border-rose-500/40 bg-rose-500/10 text-rose-200' : 'border-amber-500/30 bg-amber-500/10 text-amber-100'
-      )}
-    >
-      <div className="flex items-center justify-between gap-3">
-        <p>{error || getProcessingStatusLabel(status || 'pending')}</p>
-        {isFailed && onRetry && (
-          <button
-            type="button"
-            onClick={onRetry}
-            className="shrink-0 rounded-lg border border-white/20 px-3 py-1 text-xs font-medium hover:bg-white/10"
-          >
-            Retry
-          </button>
-        )}
-      </div>
-      {!isFailed && (
-        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/30">
-          <div
-            className="h-full bg-amber-400 transition-all duration-500"
-            style={{ width: `${pct || 15}%` }}
-          />
+  if (isFailed) {
+    return (
+      <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+        <div className="flex items-center justify-between gap-3">
+          <p>{error || getProcessingStatusLabel(status || 'failed')}</p>
+          {onRetry && (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="shrink-0 rounded-lg border border-white/20 px-3 py-1 text-xs font-medium hover:bg-white/10"
+            >
+              Retry
+            </button>
+          )}
         </div>
-      )}
-    </div>
+      </div>
+    )
+  }
+
+  return (
+    <LearningSetupExperience
+      mode="processing"
+      progress={pct}
+      processingStatus={status}
+      videoId={videoId}
+      compact={false}
+    />
   )
 }
 
@@ -2898,7 +2884,7 @@ function ProcessingStatusLine({
   error?: string | null
 }) {
   const [status, setStatus] = useState<'queued' | 'pending' | 'extracting' | 'transcribing' | 'embedding' | 'complete' | 'failed'>('pending')
-  const [label, setLabel] = useState('Processing video... Generating transcripts and chapters (max 3 hours)')
+  const [label, setLabel] = useState('Setting up your learning workspace · 8%')
   const [pollProgress, setPollProgress] = useState(0)
 
   // Use SSE for real-time updates (fallback to polling if SSE fails)
@@ -3030,13 +3016,13 @@ function ProcessingStatusLine({
   }, [videoId, status, processingStatus])
 
   const color = status === 'complete' ? 'bg-emerald-400 text-emerald-300' : status === 'failed' ? 'bg-red-400 text-red-300' : 'bg-yellow-400 text-yellow-300'
+  const pct = Math.min(100, Math.max(externalProgress || pollProgress, status === 'complete' ? 100 : 0))
   const displayText =
     status === 'complete'
       ? label
       : status === 'failed'
         ? error || label
-        : getProcessingStatusLabel(status)
-  const pct = Math.min(100, Math.max(externalProgress || pollProgress, status === 'complete' ? 100 : 0))
+        : getProcessingStatusLabel(status, pct)
 
   return (
     <div className="mt-2 flex flex-col gap-1 text-xs">

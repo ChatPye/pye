@@ -4,6 +4,8 @@ import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@clerk/nextjs';
 import WorkspaceShell from '@/components/workspace/WorkspaceShell';
+import LearningSetupExperience from '@/components/workspace/LearningSetupExperience';
+import NotificationPrompt from '@/components/workspace/NotificationPrompt';
 import { uploadVideoFile } from '@/lib/upload-video';
 import {
   clearPendingUploadFlag,
@@ -18,7 +20,7 @@ function ResumeUploadHandler() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadStage, setUploadStage] = useState('Preparing…');
+  const [uploadStage, setUploadStage] = useState('preparing');
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
@@ -48,7 +50,7 @@ function ResumeUploadHandler() {
           file.name.replace(/\.[^/.]+$/, ''),
           (pct, stage) => {
             setUploadProgress(pct);
-            setUploadStage(stage === 'uploading' ? 'Uploading to secure storage…' : 'Finalizing…');
+            setUploadStage(stage);
           }
         );
 
@@ -80,18 +82,13 @@ function ResumeUploadHandler() {
 
   return (
     <div className="mx-auto max-w-lg px-6 py-16 text-center text-white">
+      <NotificationPrompt enabled={uploading} />
       {uploading ? (
-        <>
-          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-b-2 border-white" />
-          <p className="text-zinc-300">{uploadStage}</p>
-          <div className="mx-auto mt-4 h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-zinc-800">
-            <div
-              className="h-full bg-emerald-400 transition-all duration-300"
-              style={{ width: `${uploadProgress}%` }}
-            />
-          </div>
-          <p className="mt-2 text-xs text-zinc-500">{uploadProgress}%</p>
-        </>
+        <LearningSetupExperience
+          mode="upload"
+          progress={uploadProgress}
+          stage={uploadStage}
+        />
       ) : (
         <p className="text-rose-400">{uploadError}</p>
       )}
@@ -118,27 +115,20 @@ function WorkspaceContent() {
     return (
       <>
         <ResumeUploadHandler />
-        {!hasPendingUploadFlag() && (
-          <WorkspaceShell source={source === 'youtube' ? 'youtube' : undefined} />
-        )}
+        <WorkspaceShell />
       </>
     );
   }
 
-  const workspaceProps: { source?: 'youtube' | 'upload' } = {};
-  if (source === 'youtube' || source === 'upload') {
-    workspaceProps.source = source;
-  }
-
-  return <WorkspaceShell {...workspaceProps} />;
+  return <WorkspaceShell source={source === 'upload' ? 'upload' : 'youtube'} />;
 }
 
 export default function WorkspacePage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-black flex items-center justify-center">
-          <div className="text-white">Loading workspace...</div>
+        <div className="flex min-h-screen items-center justify-center bg-black text-white">
+          <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-white" />
         </div>
       }
     >

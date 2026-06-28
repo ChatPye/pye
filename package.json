@@ -23,10 +23,13 @@
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:migrate": "node scripts/db/migrate.mjs",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "logs:analyze": "node scripts/cloudwatch-analyze.mjs",
+    "lambda:deploy-preprocess": "node scripts/deploy/deploy-video-preprocess-lambda.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.0.0",
+    "@aws-sdk/client-cloudwatch-logs": "^3.1075.0",
     "@aws-sdk/client-lambda": "^3.934.0",
     "@aws-sdk/client-rekognition": "^3.893.0",
     "@aws-sdk/client-s3": "^3.0.0",
@@ -50,6 +53,7 @@
     "mongodb": "^6.20.0",
     "mongoose": "^8.0.0",
     "next": "^15.5.19",
+    "plyr": "^3.8.4",
     "postgres": "^3.4.9",
     "prismjs": "^1.30.0",
     "react": "19",

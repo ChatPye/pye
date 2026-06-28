@@ -133,9 +133,13 @@ export class AudioTranscriptionService {
   }
 
   // Start AWS Transcribe job (returns immediately)
-  async startJobForS3Key(videoId: string, s3Key: string): Promise<string> {
+  async startJobForS3Key(
+    videoId: string,
+    s3Key: string,
+    options?: { fastMode?: boolean }
+  ): Promise<string> {
     const jobId = `transcription-${videoId}-${Date.now()}`;
-    await this.startTranscriptionJob(jobId, s3Key);
+    await this.startTranscriptionJob(jobId, s3Key, options);
     return jobId;
   }
 
@@ -183,8 +187,13 @@ export class AudioTranscriptionService {
     }
   }
 
-  private async startTranscriptionJob(jobId: string, s3Key: string): Promise<void> {
+  private async startTranscriptionJob(
+    jobId: string,
+    s3Key: string,
+    options?: { fastMode?: boolean }
+  ): Promise<void> {
     try {
+      const fastMode = options?.fastMode ?? false;
       const command = new StartTranscriptionJobCommand({
         TranscriptionJobName: jobId,
         Media: {
@@ -194,12 +203,17 @@ export class AudioTranscriptionService {
         LanguageCode: 'en-US',
         OutputBucketName: this.bucketName,
         OutputKey: `transcripts/${jobId}.json`,
-        Settings: {
-          ShowSpeakerLabels: true,
-          MaxSpeakerLabels: 10,
-          ShowAlternatives: true,
-          MaxAlternatives: 3,
-        },
+        Settings: fastMode
+          ? {
+              ShowSpeakerLabels: false,
+              ShowAlternatives: false,
+            }
+          : {
+              ShowSpeakerLabels: true,
+              MaxSpeakerLabels: 10,
+              ShowAlternatives: true,
+              MaxAlternatives: 3,
+            },
       });
 
       await this.transcribeClient.send(command);

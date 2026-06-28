@@ -374,3 +374,41 @@ export const communityThreads = pgTable("community_threads", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+export const bookmarks = pgTable("bookmarks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  ownerClerkId: varchar("owner_clerk_id", { length: 255 }).notNull(),
+  externalVideoId: varchar("external_video_id", { length: 255 }).notNull(),
+  title: varchar("title", { length: 500 }).notNull(),
+  timestampSeconds: integer("timestamp_seconds").notNull().default(0),
+  description: text("description").default(""),
+  category: varchar("category", { length: 50 }).default("general"),
+  tags: jsonb("tags").$type<string[]>().default([]),
+  isPublic: boolean("is_public").notNull().default(false),
+  thumbnailUrl: text("thumbnail_url"),
+  videoTitle: varchar("video_title", { length: 500 }),
+  channelName: varchar("channel_name", { length: 255 }),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const userPublicProfiles = pgTable("user_public_profiles", {
+  ownerClerkId: varchar("owner_clerk_id", { length: 255 }).primaryKey(),
+  publicSlug: varchar("public_slug", { length: 100 }).notNull().unique(),
+  displayName: varchar("display_name", { length: 255 }),
+  title: varchar("title", { length: 255 }),
+  headline: text("headline"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const learnerCompetencies = pgTable("learner_competencies", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  ownerClerkId: varchar("owner_clerk_id", { length: 255 }).notNull(),
+  competencyName: varchar("competency_name", { length: 255 }).notNull(),
+  level: varchar("level", { length: 50 }).notNull().default("foundational"),
+  progressPercent: integer("progress_percent").notNull().default(0),
+  evidence: jsonb("evidence").$type<string[]>().default([]),
+  sourceVideoId: varchar("source_video_id", { length: 255 }),
+  issuedAt: timestamp("issued_at").defaultNow().notNull(),
+});

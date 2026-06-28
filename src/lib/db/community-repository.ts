@@ -74,3 +74,47 @@ export async function createThread(params: {
     .returning();
   return rowToThread(row);
 }
+
+export async function addThreadReply(
+  threadId: string,
+  reply: {
+    authorClerkId: string;
+    authorName?: string;
+    content: string;
+  }
+): Promise<boolean> {
+  const db = getDb();
+  const [thread] = await db
+    .select()
+    .from(schema.communityThreads)
+    .where(eq(schema.communityThreads.id, threadId))
+    .limit(1);
+
+  if (!thread) return false;
+
+  const replies = [...(thread.replies ?? [])];
+  replies.push({
+    id: crypto.randomUUID(),
+    authorClerkId: reply.authorClerkId,
+    authorName: reply.authorName,
+    content: reply.content,
+    createdAt: new Date().toISOString(),
+  });
+
+  await db
+    .update(schema.communityThreads)
+    .set({ replies, updatedAt: new Date() })
+    .where(eq(schema.communityThreads.id, threadId));
+
+  return true;
+}
+
+export async function pinThread(threadId: string): Promise<boolean> {
+  const db = getDb();
+  const updated = await db
+    .update(schema.communityThreads)
+    .set({ isPinned: true, updatedAt: new Date() })
+    .where(eq(schema.communityThreads.id, threadId))
+    .returning({ id: schema.communityThreads.id });
+  return updated.length > 0;
+}

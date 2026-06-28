@@ -1,48 +1,36 @@
-'use server'
-
-import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/auth'
-import { connectDocumentDB } from '@/server/db/documentdb'
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
+import { requireAurora } from '@/lib/db/require-aurora';
+import { addThreadReply, pinThread } from '@/lib/db/community-repository';
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ threadId: string }> }
 ) {
   try {
-    const auth = await requireAuth()
-    const { threadId } = await params
-    const body = await request.json()
-    const { content } = body as { content?: string }
+    const authUser = await requireAuth();
+    requireAurora('Community threads');
+    const { threadId } = await params;
+    const body = await request.json();
+    const content = typeof body.content === 'string' ? body.content.trim() : '';
+
     if (!content) {
-      return NextResponse.json({ success: false, error: 'content is required' }, { status: 400 })
+      return NextResponse.json({ success: false, error: 'content is required' }, { status: 400 });
     }
 
-    const reply = {
-      id: `${Date.now()}`,
-      authorId: (auth as any).userId || 'user',
-      authorName: 'You',
+    const ok = await addThreadReply(threadId, {
+      authorClerkId: authUser.id,
+      authorName: authUser.email,
       content,
-      createdAt: new Date().toISOString(),
+    });
+
+    if (!ok) {
+      return NextResponse.json({ success: false, error: 'Thread not found' }, { status: 404 });
     }
 
-    try {
-      const db = await connectDocumentDB()
-      if (db?.connection?.db) {
-        const collection = db.connection.db.collection('threads')
-        const update = await collection.updateOne(
-          { id: threadId },
-          { $push: { replies: reply }, $set: { updatedAt: new Date().toISOString() } } as any
-        )
-        if (update.modifiedCount === 0) {
-          return NextResponse.json({ success: false, error: 'Thread not found' }, { status: 404 })
-        }
-        return NextResponse.json({ success: true, reply })
-      }
-    } catch {}
-
-    return NextResponse.json({ success: true, reply })
+    return NextResponse.json({ success: true });
   } catch (error) {
-    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
   }
 }
 
@@ -51,25 +39,17 @@ export async function PUT(
   { params }: { params: Promise<{ threadId: string }> }
 ) {
   try {
-    await requireAuth()
-    const { threadId } = await params
+    await requireAuth();
+    requireAurora('Community threads');
+    const { threadId } = await params;
 
-    try {
-      const db = await connectDocumentDB()
-      if (db?.connection?.db) {
-        const collection = db.connection.db.collection('threads')
-        const update = await collection.updateOne({ id: threadId }, { $set: { isPinned: true } })
-        if (update.modifiedCount === 0) {
-          return NextResponse.json({ success: false, error: 'Thread not found' }, { status: 404 })
-        }
-        return NextResponse.json({ success: true })
-      }
-    } catch {}
+    const ok = await pinThread(threadId);
+    if (!ok) {
+      return NextResponse.json({ success: false, error: 'Thread not found' }, { status: 404 });
+    }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true });
   } catch (error) {
-    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
   }
 }
-
-
