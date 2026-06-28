@@ -41,7 +41,15 @@ export async function invokeVideoPreprocessLambda(
     );
 
     if (response.FunctionError) {
-      logger.warn('Lambda preprocess error', { videoId, error: response.FunctionError });
+      const raw = response.Payload ? Buffer.from(response.Payload).toString('utf8') : '';
+      let detail = response.FunctionError;
+      try {
+        const parsed = JSON.parse(raw);
+        detail = parsed.errorMessage || parsed.error || raw || detail;
+      } catch {
+        if (raw) detail = raw;
+      }
+      logger.warn('Lambda preprocess error', { videoId, error: detail });
       return { transcriptionKey: videoS3Key, usedAudioExtract: false };
     }
 

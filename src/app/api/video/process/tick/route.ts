@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { findVideoByExternalId } from '@/lib/db/video-repository';
 import { advanceVideoProcessing } from '@/services/video-processor/staged-worker';
+import { sanitizeVideoForClient } from '@/lib/video/client-video';
 
 export const maxDuration = 300;
 
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
       status: result.status,
       progress: result.progress,
       error: result.error,
-      video: updated,
+      video: sanitizeVideoForClient(updated),
     });
   } catch (error) {
     console.error('Process tick error:', error);

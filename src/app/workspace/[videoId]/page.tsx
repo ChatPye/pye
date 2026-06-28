@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import WorkspaceShell from '@/components/workspace/WorkspaceShell';
 import NotificationPrompt from '@/components/workspace/NotificationPrompt';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { isUploadVideoId } from '@/lib/video-upload-utils';
 import { NotificationService } from '@/lib/notifications';
 
@@ -62,6 +63,7 @@ function WorkspaceVideoPage() {
   const [processingProgress, setProcessingProgress] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
   const notifiedRef = useRef(false);
+  const tickInFlightRef = useRef(false);
 
   const rawVideoId = useMemo(
     () => (params?.videoId ? decodeURIComponent(params.videoId) : undefined),
@@ -162,7 +164,8 @@ function WorkspaceVideoPage() {
   }, [rawVideoId]);
 
   const runProcessingTick = useCallback(async () => {
-    if (!rawVideoId) return true;
+    if (!rawVideoId || tickInFlightRef.current) return false;
+    tickInFlightRef.current = true;
     try {
       const response = await fetch('/api/video/process/tick', {
         method: 'POST',
@@ -206,6 +209,8 @@ function WorkspaceVideoPage() {
     } catch (error) {
       console.error('Processing tick failed', error);
       return false;
+    } finally {
+      tickInFlightRef.current = false;
     }
   }, [rawVideoId, resolvedSource]);
 
@@ -248,13 +253,14 @@ function WorkspaceVideoPage() {
       if (done || cancelled) return;
 
       pollTimer = setInterval(async () => {
+        if (tickInFlightRef.current) return;
         await runProcessingTick();
         const finished = await fetchStatus();
         if (finished && pollTimer) {
           clearInterval(pollTimer);
           pollTimer = null;
         }
-      }, 8000);
+      }, 12000);
     };
 
     bootstrap();
@@ -318,7 +324,7 @@ function WorkspaceVideoPage() {
     : undefined;
 
   return (
-    <>
+    <ErrorBoundary>
       <NotificationPrompt enabled={isProcessing} videoId={rawVideoId} />
       <WorkspaceShell
       videoId={rawVideoId}
@@ -338,6 +344,6 @@ function WorkspaceVideoPage() {
       summary={videoRecord?.summary}
       keyPoints={videoRecord?.keyPoints}
     />
-    </>
+    </ErrorBoundary>
   );
 }

@@ -2818,177 +2818,39 @@ function ChatSidebar({
 }
 
 function ProcessingStatusLine({
-  videoId,
   processingStatus,
   progress: externalProgress = 0,
   error,
 }: {
-  videoId: string
+  videoId?: string
   processingStatus?: ProcessingStatus
   progress?: number
   error?: string | null
 }) {
-  const [status, setStatus] = useState<'queued' | 'pending' | 'extracting' | 'transcribing' | 'embedding' | 'complete' | 'failed'>('pending')
-  const [label, setLabel] = useState('Setting up your learning workspace · 8%')
-  const [pollProgress, setPollProgress] = useState(0)
-
-  // Use SSE for real-time updates (fallback to polling if SSE fails)
-  useEffect(() => {
-    if (processingStatus) {
-      setStatus(processingStatus)
-      setLabel(getProcessingStatusLabel(processingStatus))
-    }
-  }, [processingStatus])
-
-  useEffect(() => {
-    if (externalProgress > 0) {
-      setPollProgress(externalProgress)
-    }
-  }, [externalProgress])
-
-  useEffect(() => {
-    if (processingStatus && (processingStatus === 'complete' || processingStatus === 'failed')) {
-      // Don't poll if already complete/failed from prop
-      return
-    }
-
-    // Try SSE first
-    let eventSource: EventSource | null = null
-    let pollInterval: NodeJS.Timeout | null = null
-    let isMounted = true
-
-    const trySSE = () => {
-      try {
-        eventSource = new EventSource(`/api/video/${encodeURIComponent(videoId)}/status/stream`)
-        
-        eventSource.addEventListener('status', (event) => {
-          if (!isMounted) return
-          try {
-            const data = JSON.parse(event.data)
-            setStatus(data.status as any)
-            setLabel(data.message || getProcessingStatusLabel(data.status))
-            setPollProgress(data.progress || 0)
-          } catch (e) {
-            console.error('Failed to parse SSE status:', e)
-          }
-        })
-
-        eventSource.addEventListener('complete', (event) => {
-          if (!isMounted) return
-          try {
-            const data = JSON.parse(event.data)
-            setStatus('complete')
-            setLabel(data.message || 'Processing complete!')
-            setPollProgress(100)
-            if (eventSource) {
-              eventSource.close()
-            }
-          } catch (e) {
-            console.error('Failed to parse SSE complete:', e)
-          }
-        })
-
-        eventSource.addEventListener('error', (event: Event) => {
-          if (!isMounted) return
-          // Error events from SSE don't have data, handle them differently
-          if (event.type === 'error') {
-            // Check if this is a MessageEvent with data
-            if ('data' in event && typeof (event as any).data === 'string') {
-              try {
-                const data = JSON.parse((event as any).data)
-                setStatus('failed')
-                setLabel(data.message || 'Processing failed')
-              } catch (e) {
-                setStatus('failed')
-                setLabel('Processing failed')
-              }
-            } else {
-              // Generic error event, just mark as failed
-              setStatus('failed')
-              setLabel('Processing failed')
-            }
-          }
-        })
-
-        eventSource.onerror = () => {
-          // SSE failed, fallback to polling
-          if (eventSource?.readyState === EventSource.CLOSED) {
-            if (isMounted) {
-              startPolling()
-            }
-          }
-        }
-      } catch (e) {
-        console.error('Failed to create SSE connection, using polling:', e)
-        startPolling()
-      }
-    }
-
-    const startPolling = () => {
-      if (pollInterval) return // Already polling
-      
-      const fetchStatus = async () => {
-        if (!isMounted) return
-        try {
-          const res = await fetch(`/api/video/${encodeURIComponent(videoId)}`)
-          const data = await res.json()
-          if (!isMounted) return
-          if (data?.video?.processingStatus) {
-            setStatus(data.video.processingStatus)
-            setLabel(getProcessingStatusLabel(data.video.processingStatus))
-          }
-        } catch (e) {
-          if (!isMounted) return
-          console.error('Status poll error:', e)
-        }
-      }
-
-      fetchStatus()
-      pollInterval = setInterval(fetchStatus, status === 'complete' || status === 'failed' ? 15000 : 5000)
-    }
-
-    trySSE()
-
-    return () => {
-      isMounted = false
-      if (eventSource) {
-        eventSource.close()
-      }
-      if (pollInterval) {
-        clearInterval(pollInterval)
-      }
-    }
-  }, [videoId, status, processingStatus])
-
-  const color = status === 'complete' ? 'bg-emerald-400 text-emerald-300' : status === 'failed' ? 'bg-red-400 text-red-300' : 'bg-yellow-400 text-yellow-300'
-  const pct = Math.min(100, Math.max(externalProgress || pollProgress, status === 'complete' ? 100 : 0))
-  const displayText =
+  const status = processingStatus || 'pending'
+  const pct = Math.min(100, Math.max(externalProgress, status === 'complete' ? 100 : 0))
+  const color =
     status === 'complete'
-      ? label
+      ? 'bg-emerald-400 text-emerald-300'
       : status === 'failed'
-        ? error || label
-        : getProcessingStatusLabel(status, pct)
+        ? 'bg-red-400 text-red-300'
+        : 'bg-yellow-400 text-yellow-300'
+  const displayText =
+    status === 'failed'
+      ? error || getProcessingStatusLabel(status)
+      : getProcessingStatusLabel(status, pct)
+
+  if (status === 'complete') return null
 
   return (
     <div className="mt-2 flex flex-col gap-1 text-xs">
       <div className="flex items-center gap-2">
-        <div className={`w-2 h-2 rounded-full animate-pulse ${color.split(' ')[0]}`}></div>
+        <div className={`h-2 w-2 animate-pulse rounded-full ${color.split(' ')[0]}`} />
         <span className={color.split(' ').slice(1).join(' ')}>{displayText}</span>
         {pct > 0 && pct < 100 && status !== 'failed' && (
-          <span className="text-zinc-400 ml-auto">{pct}%</span>
+          <span className="ml-auto text-zinc-400">{pct}%</span>
         )}
       </div>
-      {pct > 0 && pct < 100 && status !== 'failed' && (
-        <div className="h-1 bg-zinc-800 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-yellow-400 transition-all duration-500"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-      )}
-      {status === 'complete' && (
-        <p className="text-emerald-400/80">AI chat, chapters, and notes are ready.</p>
-      )}
     </div>
   )
 }

@@ -31,6 +31,7 @@ type ProcessingMeta = {
   embeddingOffset?: number;
   useConsolidated?: boolean;
   phase?: 'embed' | 'summarize';
+  tickLockUntil?: number;
 };
 
 function consolidateForEmbedding(
@@ -90,9 +91,14 @@ async function saveMeta(videoId: string, record: VideoRecord, meta: ProcessingMe
   });
 }
 
-/** Kick off processing (non-blocking on Vercel). */
+/** Kick off processing — mark pending only; client/cron ticks advance stages. */
 export async function startVideoProcessing(payload: ProcessingJobPayload): Promise<void> {
-  await advanceVideoProcessing(payload);
+  const record = await findVideoByExternalId(payload.videoId);
+  if (!record) return;
+  if (record.processingStatus === 'complete' || record.processingStatus === 'failed') return;
+  if (record.processingStatus === 'queued' || !record.processingStatus) {
+    await updateVideoStatus(payload.videoId, 'pending');
+  }
 }
 
 /** Advance one processing stage — safe to call repeatedly from client polls. */
@@ -116,6 +122,18 @@ export async function advanceVideoProcessing(
     return { status: 'failed', error: record.errorMessage || 'Processing failed', progress: 0 };
   }
 
+  const meta = parseMeta(record.transcriptRef ?? null);
+  const lockUntil = meta.tickLockUntil ?? 0;
+  if (lockUntil > Date.now()) {
+    return {
+      status,
+      progress: progressFor(status),
+    };
+  }
+
+  const lockMeta = { ...meta, tickLockUntil: Date.now() + 150_000 };
+  await saveMeta(videoId, record, lockMeta);
+
   try {
     if (source === 'youtube') {
       return await advanceYouTubeProcessing(videoId, record);
@@ -128,6 +146,12 @@ export async function advanceVideoProcessing(
     });
     await updateVideoStatus(videoId, 'failed', message);
     return { status: 'failed', error: message };
+  } finally {
+    const latest = await findVideoByExternalId(videoId);
+    if (latest) {
+      const cleared = { ...parseMeta(latest.transcriptRef ?? null), tickLockUntil: 0 };
+      await saveMeta(videoId, latest, cleared);
+    }
   }
 }
 

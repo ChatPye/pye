@@ -1,5 +1,3 @@
-'use server'
-
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
 import { enqueueVideoProcessingJob } from '@/services/video-processor/queue'
@@ -12,6 +10,7 @@ import {
 } from '@/lib/db/video-repository'
 import type { ProcessingStatus, VideoProcessDocument } from '@/data/models/VideoProcess'
 import { isUploadVideoId } from '@/lib/video-upload-utils'
+import { sanitizeVideoForClient } from '@/lib/video/client-video'
 
 type SourceType = 'youtube' | 'upload'
 
@@ -33,6 +32,8 @@ function appendStatusHistory(record: Partial<VideoProcessDocument>, status: Proc
   record.statusHistory.push({ status, updatedAt: new Date() })
   record.processingStatus = status
 }
+
+// appendStatusHistory reserved for explicit status transitions (retry, etc.)
 
 export async function POST(request: NextRequest) {
   try {
@@ -131,13 +132,11 @@ export async function POST(request: NextRequest) {
     }
 
     if (existingVideo) {
-      appendStatusHistory(existingVideo, existingVideo.processingStatus as ProcessingStatus)
-
       if (existingVideo.processingStatus === 'complete') {
         existingVideo = (await incrementVideoAccess(videoId)) ?? existingVideo
         return NextResponse.json<StatusResponse>({
           success: true,
-          video: existingVideo,
+          video: sanitizeVideoForClient(existingVideo),
           cached: true,
         })
       }
@@ -153,10 +152,9 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      await persistVideoRecord(existingVideo)
       return NextResponse.json<StatusResponse>({
         success: true,
-        video: existingVideo,
+        video: sanitizeVideoForClient(existingVideo),
         cached: true,
         processing: true,
       })
@@ -217,7 +215,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json<StatusResponse>({
       success: true,
-      video: newVideoRecord,
+      video: sanitizeVideoForClient(newVideoRecord),
       queued: true,
     })
   } catch (error) {
@@ -260,7 +258,7 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    return NextResponse.json<StatusResponse>({ success: true, video: updated ?? video })
+    return NextResponse.json<StatusResponse>({ success: true, video: sanitizeVideoForClient(updated ?? video) })
   } catch (error) {
     console.error('Video get API error:', error)
     return NextResponse.json<StatusResponse>(

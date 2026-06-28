@@ -1,5 +1,3 @@
-'use server'
-
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth'
 import {
@@ -9,6 +7,7 @@ import {
 } from '@/lib/db/video-repository'
 import { getMemoryVideo } from '@/data/stores/videoMemoryStore'
 import type { VideoProcessDocument } from '@/data/models/VideoProcess'
+import { sanitizeVideoForClient } from '@/lib/video/client-video'
 
 type StatusResponse = {
   success: boolean
@@ -54,7 +53,7 @@ export async function GET(
     const video = await findVideoByExternalId(id)
     if (video) {
       await incrementVideoAccess(id)
-      return NextResponse.json<StatusResponse>({ success: true, video })
+      return NextResponse.json<StatusResponse>({ success: true, video: sanitizeVideoForClient(video) })
     }
 
     const memoryVideo = getMemoryVideo(id)

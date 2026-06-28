@@ -31,8 +31,8 @@ function run(cmd, cwd = root) {
 
 function zipLambda() {
   rmSync(zipPath, { force: true });
+  // Always install Linux ffmpeg binary (Lambda runs Amazon Linux, not Windows)
   run('npm install --omit=dev', lambdaDir);
-  // Zip handler + node_modules (Linux ffmpeg binary inside @ffmpeg-installer)
   run(
     `powershell -Command "Compress-Archive -Path '${join(lambdaDir, 'handler.mjs')}','${join(lambdaDir, 'package.json')}','${join(lambdaDir, 'node_modules')}' -DestinationPath '${zipPath}' -Force"`
   );

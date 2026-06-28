@@ -4,6 +4,6 @@
   "private": true,
   "dependencies": {
     "@aws-sdk/client-s3": "^3.750.0",
-    "@ffmpeg-installer/ffmpeg": "^1.1.0"
+    "@ffmpeg-installer/linux-x64": "^4.1.0"
   }
 }

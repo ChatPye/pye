@@ -1,12 +1,12 @@
 /**
  * Extract audio MP3 from S3 video for faster AWS Transcribe.
- * Deploy with ffmpeg Lambda layer — set FFMPEG_PATH=/opt/bin/ffmpeg
+ * Uses @ffmpeg-installer/linux-x64 (Lambda runs Amazon Linux).
  *
  * Event: { videoId, videoS3Key, bucket? }
- * Returns: { audioS3Key, usedAudioExtract: true }
+ * Returns: { transcriptionKey, usedAudioExtract }
  */
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
-import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
+import ffmpegLinux from '@ffmpeg-installer/linux-x64';
 import { execFile } from 'child_process';
 import { createWriteStream, createReadStream, unlink, mkdtemp } from 'fs';
 import { pipeline } from 'stream/promises';
@@ -17,7 +17,7 @@ import { promisify } from 'util';
 const execFileAsync = promisify(execFile);
 const region = process.env.AWS_REGION || 'us-east-1';
 const bucket = process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME;
-const ffmpeg = process.env.FFMPEG_PATH || ffmpegInstaller.path;
+const ffmpeg = process.env.FFMPEG_PATH || ffmpegLinux.path;
 
 const s3 = new S3Client({ region });
 
@@ -61,7 +61,7 @@ export async function handler(event) {
       '-ar',
       '44100',
       outputPath,
-    ]);
+    ], { maxBuffer: 10 * 1024 * 1024 });
 
     const audioS3Key = `audio/${videoId}/${Date.now()}.mp3`;
     await s3.send(
