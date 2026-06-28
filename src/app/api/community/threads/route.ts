@@ -1,97 +1,57 @@
-'use server'
-
-import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/auth'
-import { connectDocumentDB } from '@/server/db/documentdb'
-
-type Thread = {
-  id: string
-  videoId: string
-  title: string
-  content: string
-  authorId: string
-  authorName?: string
-  isPinned?: boolean
-  createdAt: string
-  updatedAt: string
-  replies?: Array<{
-    id: string
-    authorId: string
-    authorName?: string
-    content: string
-    createdAt: string
-  }>
-}
-
-const inMemoryThreads = new Map<string, Thread[]>() // key: videoId
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
+import { requireAurora } from '@/lib/db/require-aurora';
+import {
+  createThread,
+  listThreadsForVideo,
+} from '@/lib/db/community-repository';
 
 export async function GET(request: NextRequest) {
   try {
-    await requireAuth()
-    const { searchParams } = new URL(request.url)
-    const videoId = searchParams.get('videoId')
+    await requireAuth();
+    requireAurora('Community threads');
+
+    const videoId = request.nextUrl.searchParams.get('videoId');
     if (!videoId) {
-      return NextResponse.json({ success: false, error: 'videoId is required' }, { status: 400 })
+      return NextResponse.json({ success: false, error: 'videoId is required' }, { status: 400 });
     }
 
-    try {
-      const db = await connectDocumentDB()
-      if (db?.connection?.db) {
-        const collection = db.connection.db.collection('threads')
-        const docs = (await collection
-          .find({ videoId })
-          .sort({ isPinned: -1, updatedAt: -1 })
-          .toArray()) as unknown as Thread[]
-        return NextResponse.json({ success: true, threads: docs })
-      }
-    } catch {}
-
-    const items = inMemoryThreads.get(videoId) || []
-    return NextResponse.json({ success: true, threads: items })
+    const threads = await listThreadsForVideo(videoId);
+    return NextResponse.json({ success: true, threads });
   } catch (error) {
-    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    const message = error instanceof Error ? error.message : 'Unauthorized';
+    return NextResponse.json({ success: false, error: message }, { status: 401 });
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const auth = await requireAuth()
-    const body = await request.json()
-    const { videoId, title, content } = body as { videoId?: string; title?: string; content?: string }
+    const authUser = await requireAuth();
+    requireAurora('Community threads');
+
+    const body = await request.json();
+    const videoId = typeof body.videoId === 'string' ? body.videoId.trim() : '';
+    const title = typeof body.title === 'string' ? body.title.trim() : '';
+    const content = typeof body.content === 'string' ? body.content.trim() : '';
+
     if (!videoId || !title || !content) {
-      return NextResponse.json({ success: false, error: 'videoId, title and content are required' }, { status: 400 })
+      return NextResponse.json(
+        { success: false, error: 'videoId, title and content are required' },
+        { status: 400 }
+      );
     }
 
-    const now = new Date().toISOString()
-    const thread: Thread = {
-      id: `${Date.now()}`,
+    const thread = await createThread({
       videoId,
       title,
       content,
-      authorId: (auth as any).userId || 'user',
-      authorName: 'You',
-      isPinned: false,
-      createdAt: now,
-      updatedAt: now,
-      replies: [],
-    }
+      authorClerkId: authUser.id,
+      authorName: authUser.email ?? 'Learner',
+    });
 
-    try {
-      const db = await connectDocumentDB()
-      if (db?.connection?.db) {
-        const collection = db.connection.db.collection('threads')
-        await collection.insertOne(thread as any)
-        return NextResponse.json({ success: true, thread })
-      }
-    } catch {}
-
-    const items = inMemoryThreads.get(videoId) || []
-    items.unshift(thread)
-    inMemoryThreads.set(videoId, items)
-    return NextResponse.json({ success: true, thread })
+    return NextResponse.json({ success: true, thread });
   } catch (error) {
-    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    console.error('Create thread error:', error);
+    return NextResponse.json({ success: false, error: 'Failed to create thread' }, { status: 500 });
   }
 }
-
-

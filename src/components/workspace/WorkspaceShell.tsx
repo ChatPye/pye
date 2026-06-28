@@ -3,6 +3,7 @@
 import { useMemo, useState, useCallback, useRef, useEffect, ChangeEvent } from 'react'
 import { createClip, createSnip, requestChapters, getChapters } from '@/lib/video-actions'
 import { uploadVideoFile } from '@/lib/upload-video'
+import { StudyPanel } from '@/components/workspace/StudyPanel'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import Image from 'next/image'
@@ -318,8 +319,22 @@ export default function WorkspaceShell({
   const [clipModalOpen, setClipModalOpen] = useState(false)
   const [videoDuration, setVideoDuration] = useState(0)
   const [apiRecentVideos, setApiRecentVideos] = useState<RecentItem[]>([])
-  const [chatSessionId] = useState(() => `session_${Date.now()}`)
+  const [apiPods, setApiPods] = useState<PodSummary[]>([])
+  const [chatSessionId, setChatSessionId] = useState('pending')
   const chatSavedRef = useRef(false)
+
+  useEffect(() => {
+    if (!videoId || typeof window === 'undefined') return
+    const key = `chatpye_session_${videoId}`
+    const stored = localStorage.getItem(key)
+    if (stored) {
+      setChatSessionId(stored)
+    } else {
+      const id = `session_${Date.now()}`
+      localStorage.setItem(key, id)
+      setChatSessionId(id)
+    }
+  }, [videoId])
   
   const showActionToast = (t: string) => {
     setActionToast(t)
@@ -364,18 +379,51 @@ export default function WorkspaceShell({
     }
   }, [isSignedIn, videoId, processingStatus])
 
+  // Load pods from Aurora
+  useEffect(() => {
+    if (!isSignedIn || !user?.id) return
+    let ignore = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/pods', { credentials: 'include' })
+        if (!res.ok || ignore) return
+        const data = await res.json()
+        if (data.success && Array.isArray(data.pods)) {
+          setApiPods(
+            data.pods.map((p: { id: string; title: string; ownerId: string; memberIds?: string[] }) => ({
+              id: p.id,
+              title: p.title,
+              role: p.ownerId === user.id ? ('owner' as const) : ('member' as const),
+              memberCount: p.memberIds?.length,
+            }))
+          )
+        }
+      } catch {
+        /* ignore */
+      }
+    })()
+    return () => {
+      ignore = true
+    }
+  }, [isSignedIn, user?.id, videoId])
+
   // Load chat history on mount
   useEffect(() => {
-    if (!videoId || !isSignedIn) return
+    if (!videoId || !isSignedIn || chatSessionId === 'pending') return
     let ignore = false
     
     const loadChatHistory = async () => {
       try {
-        const res = await fetch(`/api/chat-history?videoId=${encodeURIComponent(videoId)}&sessionId=${chatSessionId}`)
+        const res = await fetch(`/api/chat-history?videoId=${encodeURIComponent(videoId)}&sessionId=${encodeURIComponent(chatSessionId)}`, { credentials: 'include' })
         if (!res.ok || ignore) return
         const data = await res.json()
         if (data.success && data.chatHistory && !data.chatHistory.isNew && data.chatHistory.messages) {
-          setMessages(data.chatHistory.messages.map((m: any) => ({
+          const resolvedSession = data.chatHistory.sessionId as string | undefined
+          if (resolvedSession && resolvedSession !== chatSessionId) {
+            localStorage.setItem(`chatpye_session_${videoId}`, resolvedSession)
+            setChatSessionId(resolvedSession)
+          }
+          setMessages(data.chatHistory.messages.map((m: { id?: string; type?: string; content: string; timestamp?: string; createdAt?: string }) => ({
             id: m.id || `msg_${Date.now()}_${Math.random()}`,
             role: m.type === 'ai' ? 'assistant' : 'user',
             content: m.content,
@@ -394,7 +442,7 @@ export default function WorkspaceShell({
 
   // Save chat history when messages change (debounced)
   useEffect(() => {
-    if (!videoId || !isSignedIn || messages.length === 0) return
+    if (!videoId || !isSignedIn || chatSessionId === 'pending' || messages.length === 0) return
     
     const timeoutId = setTimeout(async () => {
       try {
@@ -601,7 +649,9 @@ export default function WorkspaceShell({
     const joined: PodSummary[] = []
     const owned: PodSummary[] = []
 
-    const metadataPods = extractPodsFromMetadata(user?.publicMetadata?.pods)
+    const metadataPods = apiPods.length
+      ? apiPods
+      : extractPodsFromMetadata(user?.publicMetadata?.pods)
     metadataPods.forEach((pod) => {
       if (pod.role === 'owner') {
         owned.push(pod)
@@ -649,7 +699,7 @@ export default function WorkspaceShell({
     ]
 
     return { joinedPods: joined, ownedPods: owned, recentVideos, menu }
-  }, [user?.publicMetadata, router, apiRecentVideos])
+  }, [user?.publicMetadata, user?.id, router, apiRecentVideos, apiPods])
 
   const userDisplayName = user?.firstName ? `${user.firstName}${user.lastName ? ` ${user.lastName}` : ''}` : user?.username || 'Workspace member'
   const subscriptionTier = (user?.publicMetadata?.subscription as string | undefined) ?? 'freemium'
@@ -714,21 +764,8 @@ export default function WorkspaceShell({
           throw new Error(data.error || 'Join failed')
         }
       } else {
-        // Request to join invite-only pod
-        const response = await fetch(`/api/pods/${podId}/request`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
-        })
-        const data = await response.json()
-        if (data.success) {
-          showActionToast('Request sent to admin')
-          setActionStates(prev => ({ ...prev, joinPod: { loading: false, success: true } }))
-          setTimeout(() => {
-            setActionStates(prev => ({ ...prev, joinPod: { loading: false, success: false } }))
-          }, 2000)
-        } else {
-          throw new Error(data.error || 'Request failed')
-        }
+        showActionToast('This pod is invite-only — ask the owner for an invite link')
+        setActionStates(prev => ({ ...prev, joinPod: { loading: false, success: false } }))
       }
     } catch (error) {
       console.error('Error joining pod:', error)
@@ -3179,6 +3216,8 @@ function NotesTab({ videoId }: { videoId?: string }) {
             <p className="text-sm text-zinc-400">Pulling AI content into your notes.</p>
           </div>
         )}
+
+        <StudyPanel videoId={videoId} />
       </div>
     </div>
   )

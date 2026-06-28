@@ -353,3 +353,24 @@ export const videoFlashcards = pgTable("video_flashcards", {
   cards: jsonb("cards").$type<Array<{ front: string; back: string }>>().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const communityThreads = pgTable("community_threads", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  externalVideoId: varchar("external_video_id", { length: 255 }).notNull(),
+  title: varchar("title", { length: 500 }).notNull(),
+  content: text("content").notNull(),
+  authorClerkId: varchar("author_clerk_id", { length: 255 }).notNull(),
+  authorName: varchar("author_name", { length: 255 }),
+  isPinned: boolean("is_pinned").notNull().default(false),
+  replies: jsonb("replies").$type<
+    Array<{
+      id: string;
+      authorClerkId: string;
+      authorName?: string;
+      content: string;
+      createdAt: string;
+    }>
+  >().default([]),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});

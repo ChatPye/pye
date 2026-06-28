@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import { requireAurora } from '@/lib/db/require-aurora';
 import {
   deleteChatSession,
+  findLatestChatSession,
   getChatSession,
   upsertChatSession,
   type ChatMessage,
@@ -22,7 +23,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Video ID is required' }, { status: 400 });
     }
 
-    const chatHistory = await getChatSession(authUser.id, videoId, sessionId);
+    const chatHistory =
+      (await getChatSession(authUser.id, videoId, sessionId)) ||
+      (await findLatestChatSession(authUser.id, videoId));
 
     if (!chatHistory || !chatHistory.isActive) {
       return NextResponse.json({

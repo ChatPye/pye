@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { getDb, isDatabaseConfigured, schema } from '@/lib/db';
 
 export type ChatMessage = {
@@ -18,6 +18,37 @@ export type ChatSession = {
   isActive: boolean;
   lastActivity: Date;
 };
+
+export async function findLatestChatSession(
+  clerkUserId: string,
+  externalVideoId: string
+): Promise<ChatSession | null> {
+  if (!isDatabaseConfigured()) return null;
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(schema.chatSessions)
+    .where(
+      and(
+        eq(schema.chatSessions.clerkUserId, clerkUserId),
+        eq(schema.chatSessions.externalVideoId, externalVideoId),
+        eq(schema.chatSessions.isActive, true)
+      )
+    )
+    .orderBy(desc(schema.chatSessions.lastActivity))
+    .limit(1);
+
+  if (!row) return null;
+  return {
+    clerkUserId: row.clerkUserId,
+    externalVideoId: row.externalVideoId,
+    sessionId: row.sessionId,
+    messages: (row.messages ?? []) as ChatMessage[],
+    videoMetadata: (row.videoMetadata ?? {}) as Record<string, unknown>,
+    isActive: row.isActive,
+    lastActivity: row.lastActivity,
+  };
+}
 
 export async function getChatSession(
   clerkUserId: string,

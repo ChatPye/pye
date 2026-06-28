@@ -28,7 +28,11 @@ if (!connectionString || connectionString.includes('your-aurora-cluster')) {
   process.exit(1);
 }
 
-const sql = postgres(connectionString, { prepare: false, max: 1 });
+const sql = postgres(connectionString, {
+  prepare: false,
+  max: 1,
+  onnotice: () => {},
+});
 
 async function main() {
   console.log('Connecting to Aurora…');
