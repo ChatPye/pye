@@ -280,7 +280,7 @@ export default function WorkspaceShell({
   summary,
   keyPoints = [],
 }: WorkspaceShellProps) {
-  const { isSignedIn, user } = useUser()
+  const { isSignedIn, isLoaded, user } = useUser()
   const { signOut } = useClerk()
   const router = useRouter()
   const { redirectToWorkspace, redirectToSignIn } = useUnifiedRouting()
@@ -1176,6 +1176,7 @@ export default function WorkspaceShell({
               onClose={() => setSidebarOpen(false)}
               isMobile
               state={sidebarData}
+              isSignedIn={isSignedIn}
             />
           </div>
           <button
@@ -1205,6 +1206,7 @@ export default function WorkspaceShell({
             onCollapse={handleCollapseSidebar}
             onClose={() => setSidebarOpen(false)}
             state={sidebarData}
+            isSignedIn={isSignedIn}
           />
 
           <main className="flex-1 overflow-y-auto bg-zinc-950">
@@ -1492,12 +1494,14 @@ function WorkspaceSidebar({
   onClose,
   isMobile = false,
   state,
+  isSignedIn = true,
 }: {
   collapsed: boolean
   onCollapse: () => void
   onClose?: () => void
   isMobile?: boolean
   state: SidebarState
+  isSignedIn?: boolean
 }) {
   const joinedPodsMemo = useMemo(() => state.joinedPods.slice(0, 5), [state.joinedPods])
   const ownedPodsMemo = useMemo(() => state.ownedPods.slice(0, 5), [state.ownedPods])
@@ -1644,6 +1648,23 @@ function WorkspaceSidebar({
           )}
         </div>
       </section>
+
+      {!isSignedIn && (
+        <div className={cx('mt-auto space-y-2 border-t border-white/10 pt-4', collapsed && !isMobile && 'hidden')}>
+          <Link
+            href="/sign-in"
+            className="flex w-full items-center justify-center rounded-xl border border-blue-400/40 bg-blue-400/10 px-3 py-2 text-sm font-medium text-blue-100 hover:border-blue-300"
+          >
+            Sign in
+          </Link>
+          <Link
+            href="/sign-up"
+            className="flex w-full items-center justify-center rounded-xl border border-white/15 px-3 py-2 text-sm text-white/80 hover:border-white/30 hover:text-white"
+          >
+            Sign up
+          </Link>
+        </div>
+      )}
 
     </aside>
   )

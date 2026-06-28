@@ -2,8 +2,9 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { Menu, ArrowRight } from 'lucide-react';
-import { SignedIn, SignedOut, SignInButton, UserButton, useUser } from '@clerk/nextjs';
+import { SignedIn, SignedOut, UserButton, useUser } from '@clerk/nextjs';
 import Link from 'next/link';
+import { CLERK_SIGN_IN_URL, CLERK_SIGN_UP_URL, isClerkPublishableKey } from '@/lib/clerk-env';
 
 // Force dynamic rendering to avoid SSR issues with Clerk
 export const dynamic = 'force-dynamic';
@@ -73,11 +74,18 @@ function HeaderContent() {
 
           <SignedOut>
             <div className="flex items-center gap-3">
-              <SignInButton mode="modal">
-                <button className="text-sm text-zinc-300 hover:text-white transition-colors font-medium border border-blue-500/30 hover:border-blue-500/50 px-3 py-2 rounded-md bg-blue-500/5 hover:bg-blue-500/10">
-                  Sign in
-                </button>
-              </SignInButton>
+              <Link
+                href={CLERK_SIGN_IN_URL}
+                className="text-sm text-zinc-300 hover:text-white transition-colors font-medium border border-blue-500/30 hover:border-blue-500/50 px-3 py-2 rounded-md bg-blue-500/5 hover:bg-blue-500/10"
+              >
+                Sign in
+              </Link>
+              <Link
+                href={CLERK_SIGN_UP_URL}
+                className="text-sm text-zinc-300 hover:text-white transition-colors font-medium border border-zinc-600 hover:border-zinc-500 px-3 py-2 rounded-md"
+              >
+                Sign up
+              </Link>
               <Link
                 href="#start-learning"
                 className="inline-flex items-center gap-2 rounded-md bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-zinc-100 shadow-lg"
@@ -86,10 +94,9 @@ function HeaderContent() {
                   const element = document.getElementById('start-learning')
                   if (element) {
                     element.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                    // Focus on input if it exists
                     setTimeout(() => {
-                      const input = element.querySelector('input[type="text"]') as HTMLInputElement
-                      if (input) input.focus()
+                      const input = element.querySelector('input[type="file"]') as HTMLInputElement
+                      input?.click()
                     }, 500)
                   }
                 }}
@@ -145,11 +152,18 @@ function HeaderContent() {
               </SignedIn>
               <SignedOut>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <SignInButton mode="modal">
-                    <button className="text-sm text-zinc-300 hover:text-white transition-colors font-medium border border-blue-500/30 hover:border-blue-500/50 px-3 py-2 rounded-md bg-blue-500/5 hover:bg-blue-500/10">
-                      Sign in
-                    </button>
-                  </SignInButton>
+                  <Link
+                    href={CLERK_SIGN_IN_URL}
+                    className="text-sm text-zinc-300 hover:text-white transition-colors font-medium border border-blue-500/30 hover:border-blue-500/50 px-3 py-2 rounded-md bg-blue-500/5 hover:bg-blue-500/10 text-center"
+                  >
+                    Sign in
+                  </Link>
+                  <Link
+                    href={CLERK_SIGN_UP_URL}
+                    className="text-sm text-zinc-300 hover:text-white transition-colors font-medium border border-zinc-600 px-3 py-2 rounded-md text-center"
+                  >
+                    Sign up
+                  </Link>
                   <Link
                     href="#start-learning"
                     className="inline-flex items-center gap-2 rounded-md bg-white px-3 py-2 text-sm font-semibold text-black transition hover:bg-zinc-100 shadow-lg"
@@ -183,8 +197,8 @@ export default function Header() {
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
-    const hasClerkKey = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-    setClerkAvailable(hasClerkKey);
+    const key = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+    setClerkAvailable(isClerkPublishableKey(key));
     setIsClient(true);
   }, []);
 
@@ -214,8 +228,11 @@ export default function Header() {
             </a>
           </div>
           <div className="hidden items-center gap-3 md:flex">
-            <Link href="/start" className="text-sm text-zinc-300 hover:text-white transition-colors font-medium border border-blue-500/30 hover:border-blue-500/50 px-3 py-2 rounded-md bg-blue-500/5 hover:bg-blue-500/10">
+            <Link href={CLERK_SIGN_IN_URL} className="text-sm text-zinc-300 hover:text-white transition-colors font-medium border border-blue-500/30 hover:border-blue-500/50 px-3 py-2 rounded-md bg-blue-500/5 hover:bg-blue-500/10">
               Sign in
+            </Link>
+            <Link href={CLERK_SIGN_UP_URL} className="text-sm text-zinc-300 hover:text-white transition-colors font-medium border border-zinc-600 px-3 py-2 rounded-md">
+              Sign up
             </Link>
             <Link
               href="#start-learning"
@@ -256,8 +273,11 @@ export default function Header() {
             </a>
           </div>
           <div className="hidden items-center gap-3 md:flex">
-            <Link href="/start" className="text-sm text-zinc-300 hover:text-white transition-colors font-medium border border-blue-500/30 hover:border-blue-500/50 px-3 py-2 rounded-md bg-blue-500/5 hover:bg-blue-500/10">
+            <Link href={CLERK_SIGN_IN_URL} className="text-sm text-zinc-300 hover:text-white transition-colors font-medium border border-blue-500/30 hover:border-blue-500/50 px-3 py-2 rounded-md bg-blue-500/5 hover:bg-blue-500/10">
               Sign in
+            </Link>
+            <Link href={CLERK_SIGN_UP_URL} className="text-sm text-zinc-300 hover:text-white transition-colors font-medium border border-zinc-600 px-3 py-2 rounded-md">
+              Sign up
             </Link>
             <Link
               href="#start-learning"
@@ -298,8 +318,11 @@ export default function Header() {
             </a>
           </div>
           <div className="hidden items-center justify-end gap-3 md:flex">
-            <Link href="/start" className="text-sm text-zinc-300 hover:text-white transition-colors font-medium border border-blue-500/30 hover:border-blue-500/50 px-3 py-2 rounded-md bg-blue-500/5 hover:bg-blue-500/10">
+            <Link href={CLERK_SIGN_IN_URL} className="text-sm text-zinc-300 hover:text-white transition-colors font-medium border border-blue-500/30 hover:border-blue-500/50 px-3 py-2 rounded-md bg-blue-500/5 hover:bg-blue-500/10">
               Sign in
+            </Link>
+            <Link href={CLERK_SIGN_UP_URL} className="text-sm text-zinc-300 hover:text-white transition-colors font-medium border border-zinc-600 px-3 py-2 rounded-md">
+              Sign up
             </Link>
             <Link
               href="#start-learning"

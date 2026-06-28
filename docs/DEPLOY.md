@@ -168,7 +168,44 @@ Click **Deploy** in Vercel, or push to `main` (after GitHub Actions secrets are 
 
 ### 4. Clerk production URLs
 
-In Clerk → Configure → Domains, add your Vercel domain.
+In [Clerk Dashboard](https://dashboard.clerk.com) → your **Production** instance:
+
+#### Domains
+
+**Configure → Domains** — add your Vercel URL, e.g. `https://chatpye-web.vercel.app`
+
+#### Paths (must match the app)
+
+**Configure → Paths**:
+
+| Setting | Value |
+|---------|--------|
+| Sign-in URL | `/sign-in` |
+| Sign-up URL | `/sign-up` |
+| After sign-in | `/auth-callback` (or leave default; app handles redirect) |
+| After sign-up | `/auth-callback` |
+
+#### Allowed redirect URLs
+
+**Configure → Paths → Allowed redirect URLs** — add:
+
+- `https://your-app.vercel.app/*`
+- `https://your-app.vercel.app/auth-callback`
+
+#### Clerk Tier 2 environment variables (optional)
+
+The app **defaults** these in code (`src/lib/clerk-env.ts`). You only need to set them in Vercel if you use custom paths:
+
+| Variable | Default | Where to set |
+|----------|---------|--------------|
+| `CLERK_SIGN_IN_URL` | `/sign-in` | Vercel → Settings → Environment Variables |
+| `CLERK_SIGN_UP_URL` | `/sign-up` | Same |
+| `CLERK_SIGN_IN_FALLBACK_REDIRECT_URL` | `/workspace` | Same |
+| `CLERK_SIGN_UP_FALLBACK_REDIRECT_URL` | `/auth-callback?redirect=%2Fworkspace` | Same |
+
+Also supported (client-side): `NEXT_PUBLIC_CLERK_SIGN_IN_URL`, `NEXT_PUBLIC_CLERK_SIGN_UP_URL`, and the `NEXT_PUBLIC_*_FALLBACK_*` variants.
+
+**Tier 1 (required):** `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` from **Clerk → API Keys**. Copy the full keys (they are long base64 strings starting with `pk_live_` / `sk_live_`).
 
 Set HR users: User → Public metadata → `{ "role": "hr" }`
 
@@ -242,6 +279,8 @@ Legacy ECS workflows are disabled (`*.disabled`).
 | Issue | Fix |
 |-------|-----|
 | Build fails: Clerk | Add real Clerk keys to Vercel + GitHub secrets |
+| Sign-in page spins forever / no widget | Invalid `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` — copy full key from Clerk API Keys; add Vercel domain in Clerk Domains |
+| Sign in / Sign up missing in nav | Redeploy after auth fix; keys must be valid so `ClerkProvider` mounts |
 | DB connection timeout | Aurora SG must allow your IP or use Vercel + [Vercel Postgres alternative] or RDS Proxy |
 | Upload fails | Check S3 CORS + IAM keys on Vercel |
 | HR dashboard 403 | Set Clerk `publicMetadata.role = "hr"` |

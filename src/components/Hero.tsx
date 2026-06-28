@@ -3,12 +3,18 @@
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from 'react';
 import { ArrowRight, ShieldCheck, UploadCloud } from 'lucide-react';
 import Link from 'next/link';
+import { useAuth } from '@clerk/nextjs';
+import { useRouter } from 'next/navigation';
 import { useUnifiedRouting } from '@/lib/routing';
+import { uploadVideoFile } from '@/lib/upload-video';
+import { CLERK_SIGN_IN_URL, CLERK_SIGN_UP_URL } from '@/lib/clerk-env';
 
 export default function Hero() {
   const animatedRefs = useRef<(HTMLElement | null)[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const { redirectToWorkspace } = useUnifiedRouting();
+  const { redirectToSignIn } = useUnifiedRouting();
+  const { isSignedIn, isLoaded } = useAuth();
+  const router = useRouter();
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState('');
@@ -45,7 +51,7 @@ export default function Hero() {
     setError('');
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (isSubmitting) return;
 
@@ -54,14 +60,39 @@ export default function Hero() {
       return;
     }
 
+    if (!isLoaded) {
+      setError('Checking sign-in status…');
+      return;
+    }
+
+    if (!isSignedIn) {
+      redirectToSignIn({
+        source: 'hero',
+        query: { source: 'upload' },
+      });
+      return;
+    }
+
     setError('');
     setIsSubmitting(true);
 
-    redirectToWorkspace({
-      source: 'hero',
-      videoId: `upload-${Date.now()}`,
-      query: { source: 'upload' },
-    });
+    try {
+      const result = await uploadVideoFile(
+        selectedFile,
+        selectedFile.name.replace(/\.[^/.]+$/, '')
+      );
+
+      if (!result.success || !result.videoId) {
+        setError(result.error || 'Upload failed. Please try again.');
+        return;
+      }
+
+      router.push(`/workspace/${encodeURIComponent(result.videoId)}?source=upload`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const openFilePicker = () => {
@@ -170,21 +201,33 @@ export default function Hero() {
                 <button
                   type="submit"
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={isSubmitting || !selectedFile}
+                  disabled={isSubmitting || !selectedFile || !isLoaded}
                 >
-                  Start learning
+                  {isSubmitting
+                    ? 'Uploading…'
+                    : isLoaded && !isSignedIn
+                      ? 'Sign in to start learning'
+                      : 'Start learning'}
                   <ArrowRight className="h-4 w-4" />
                 </button>
 
                 <p className="text-left text-xs text-zinc-500">
-                  Already have an account?{' '}
-                  <Link href="/workspace" className="text-blue-400 hover:text-blue-300">
-                    Go to workspace
-                  </Link>
-                  {' · '}
-                  <Link href="/enterprise" className="text-blue-400 hover:text-blue-300">
-                    Enterprise L&amp;D
-                  </Link>
+                  {isLoaded && !isSignedIn ? (
+                    <>
+                      <Link href={CLERK_SIGN_IN_URL} className="text-blue-400 hover:text-blue-300">
+                        Sign in
+                      </Link>
+                      {' or '}
+                      <Link href={CLERK_SIGN_UP_URL} className="text-blue-400 hover:text-blue-300">
+                        create an account
+                      </Link>
+                      {' to upload and chat with your video.'}
+                    </>
+                  ) : (
+                    <>
+                      Signed in — your video will upload securely to your workspace.
+                    </>
+                  )}
                 </p>
 
                 {error && <p className="text-left text-sm text-rose-400">{error}</p>}
