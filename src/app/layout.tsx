@@ -23,6 +23,9 @@ export const metadata: Metadata = {
   },
 };
 
+// Clerk auth app — skip static prerender at build (avoids invalid-key failures on Vercel)
+export const dynamic = 'force-dynamic';
+
 export default function RootLayout({
   children,
 }: Readonly<{

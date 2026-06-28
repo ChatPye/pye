@@ -12,10 +12,14 @@ interface OptimizedClerkProviderProps {
 const SIGN_IN_FALLBACK_URL = process.env.CLERK_SIGN_IN_FALLBACK_REDIRECT_URL || '/workspace';
 const SIGN_UP_FALLBACK_URL = process.env.CLERK_SIGN_UP_FALLBACK_REDIRECT_URL || '/auth-callback?redirect=%2Fworkspace';
 
+const isValidClerkKey = (key: string) =>
+  /^pk_(test|live)_[A-Za-z0-9]{20,}$/.test(key);
+
 export function OptimizedClerkProvider({ children, publishableKey }: OptimizedClerkProviderProps) {
   const rawKey = typeof publishableKey === 'string' ? publishableKey.trim() : '';
   const isPlaceholderKey = !rawKey || rawKey === 'pk_test_xxx' || rawKey.endsWith('_xxx');
-  const clerkKey = isPlaceholderKey ? null : rawKey;
+  const clerkKey =
+    isPlaceholderKey || !isValidClerkKey(rawKey) ? null : rawKey;
   const isProduction = process.env.NODE_ENV === 'production';
 
   // Debug logging (non-blocking)
