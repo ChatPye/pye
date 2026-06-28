@@ -145,8 +145,14 @@ export function checkDDoSProtection(request: NextRequest, headers?: Headers): {
 } {
   const pathname = request.nextUrl.pathname;
 
-  // Video players issue many byte-range requests; do not rate-limit them like API calls
-  if (/^\/api\/video\/[^/]+\/stream$/.test(pathname)) {
+  // Video pipeline endpoints — many polls/range requests during processing
+  if (/^\/api\/video\/[^/]+\/(stream|status\/stream)$/.test(pathname)) {
+    return { allowed: true };
+  }
+  if (pathname === '/api/video/process' || pathname.startsWith('/api/video/process/')) {
+    return { allowed: true };
+  }
+  if (/^\/api\/video\/[^/]+$/.test(pathname) && request.method === 'GET') {
     return { allowed: true };
   }
 

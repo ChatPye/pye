@@ -151,6 +151,46 @@ export class AudioTranscriptionService {
     error?: string;
     confidence?: number;
   }> {
+    return this.pollJobOnce(jobId);
+  }
+
+  /**
+   * Poll until complete, failed, or timeout — use inside /process/tick (maxDuration 300s).
+   * ChatYTT-style: do async work server-side, not one AWS poll per browser tick.
+   */
+  async pollJobUntilDone(
+    jobId: string,
+    options?: { maxWaitMs?: number; pollIntervalMs?: number }
+  ): Promise<{
+    status: 'pending' | 'complete' | 'failed';
+    segments?: Array<{ text: string; start: number; duration: number }>;
+    text?: string;
+    error?: string;
+    confidence?: number;
+    waitedMs?: number;
+  }> {
+    const maxWaitMs = options?.maxWaitMs ?? 120_000;
+    const pollIntervalMs = options?.pollIntervalMs ?? 4_000;
+    const started = Date.now();
+
+    while (Date.now() - started < maxWaitMs) {
+      const result = await this.pollJobOnce(jobId);
+      if (result.status !== 'pending') {
+        return { ...result, waitedMs: Date.now() - started };
+      }
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    }
+
+    return { status: 'pending', waitedMs: Date.now() - started };
+  }
+
+  private async pollJobOnce(jobId: string): Promise<{
+    status: 'pending' | 'complete' | 'failed';
+    segments?: Array<{ text: string; start: number; duration: number }>;
+    text?: string;
+    error?: string;
+    confidence?: number;
+  }> {
     try {
       const response = await this.transcribeClient.send(
         new GetTranscriptionJobCommand({ TranscriptionJobName: jobId })

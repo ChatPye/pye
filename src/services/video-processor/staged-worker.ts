@@ -165,10 +165,19 @@ async function advanceUploadProcessing(
   videoId: string,
   record: VideoRecord
 ): Promise<{ status: ProcessingStatus; progress?: number; error?: string }> {
-  const status = record.processingStatus || 'queued';
-  const meta = parseMeta(record.transcriptRef ?? null);
+  let status = (record.processingStatus || 'queued') as ProcessingStatus;
+  let meta = parseMeta(record.transcriptRef ?? null);
 
-  if (status === 'queued' || status === 'pending' || status === 'extracting') {
+  // Recover: job already started but status not yet transcribing
+  if (meta.transcribeJobId && (status === 'queued' || status === 'pending' || status === 'extracting')) {
+    await updateVideoStatus(videoId, 'transcribing');
+    record = (await findVideoByExternalId(videoId))!;
+    status = 'transcribing';
+    meta = parseMeta(record.transcriptRef ?? null);
+  }
+
+  // Phase 1 — prepare media + start AWS Transcribe (idempotent)
+  if ((status === 'queued' || status === 'pending' || status === 'extracting') && !meta.transcribeJobId) {
     await updateVideoStatus(videoId, 'extracting');
     const s3Key = record.s3Key;
     if (!s3Key) {
@@ -176,37 +185,45 @@ async function advanceUploadProcessing(
       return { status: 'failed', error: 'No S3 file for this upload' };
     }
 
-    let transcriptionKey = meta.transcriptionS3Key;
-    if (!transcriptionKey) {
+    if (!meta.transcriptionS3Key) {
       const prep = await prepareTranscriptionMedia(videoId, s3Key);
-      transcriptionKey = prep.transcriptionKey;
-      meta.transcriptionS3Key = transcriptionKey;
+      meta.transcriptionS3Key = prep.transcriptionKey;
       meta.audioExtracted = prep.usedAudioExtract;
       await saveMeta(videoId, record, meta);
     }
 
     const jobId = await audioTranscriptionService.startJobForS3Key(
       videoId,
-      transcriptionKey,
+      meta.transcriptionS3Key,
       { fastMode: true }
     );
     meta.transcribeJobId = jobId;
     meta.embeddingOffset = 0;
     await updateVideoStatus(videoId, 'transcribing');
     await saveMeta(videoId, record, meta);
-    return { status: 'transcribing', progress: 40 };
+    record = (await findVideoByExternalId(videoId))!;
+    status = 'transcribing';
+    meta = parseMeta(record.transcriptRef ?? null);
   }
 
+  // Phase 2 — poll Transcribe (wait up to ~2 min per tick so short videos finish in one request)
   if (status === 'transcribing') {
     if (!meta.transcribeJobId) {
       await updateVideoStatus(videoId, 'failed', 'Missing transcription job');
       return { status: 'failed', error: 'Missing transcription job' };
     }
 
-    const poll = await audioTranscriptionService.pollJob(meta.transcribeJobId);
+    const poll = await audioTranscriptionService.pollJobUntilDone(meta.transcribeJobId, {
+      maxWaitMs: 120_000,
+      pollIntervalMs: 4_000,
+    });
+
     if (poll.status === 'pending') {
-      return { status: 'transcribing', progress: 45 };
+      const elapsed = poll.waitedMs ?? 0;
+      const progress = 40 + Math.min(14, Math.floor(elapsed / 8000));
+      return { status: 'transcribing', progress };
     }
+
     if (poll.status === 'failed') {
       await updateVideoStatus(videoId, 'failed', poll.error || 'Transcription failed');
       return { status: 'failed', error: poll.error || 'Transcription failed' };
@@ -237,7 +254,7 @@ async function advanceUploadProcessing(
       videoId,
       duration: Math.ceil(last.start + (last.duration || 0)),
       processingStatus: 'embedding',
-      transcriptRef: serializeMeta({ ...meta, embeddingOffset: 0 }),
+      transcriptRef: serializeMeta({ ...meta, embeddingOffset: 0, phase: 'embed' }),
     });
     record = (await findVideoByExternalId(videoId))!;
     return advanceUploadProcessing(videoId, record);

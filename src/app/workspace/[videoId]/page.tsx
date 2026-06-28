@@ -254,7 +254,7 @@ function WorkspaceVideoPage() {
           clearInterval(pollTimer);
           pollTimer = null;
         }
-      }, 4000);
+      }, 8000);
     };
 
     bootstrap();
