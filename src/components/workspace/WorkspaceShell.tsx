@@ -548,11 +548,6 @@ export default function WorkspaceShell({
 
     if (processingStatus === 'complete' && previousStatus !== 'complete') {
       addAssistantMessage('Great news! The video is processed and ready for questions. Ask me anything about it!')
-      fetch('/api/competencies/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoId }),
-      }).catch(() => null)
     }
 
     if (processingStatus === 'failed' && previousStatus !== 'failed') {
@@ -2828,7 +2823,7 @@ function ChatSidebar({
           </div>
         )}
       </div>
-      <SkillProofTaskPanel videoId={videoId} />
+      <SkillProofTaskPanel videoId={videoId} processingStatus={processingStatus} />
     </aside>
   )
 }

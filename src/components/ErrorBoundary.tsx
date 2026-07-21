@@ -12,21 +12,33 @@ interface State {
   hasError: boolean;
   error: Error | null;
   errorInfo: ErrorInfo | null;
+  incidentId: string | null;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false, error: null, errorInfo: null };
+    this.state = { hasError: false, error: null, errorInfo: null, incidentId: null };
   }
 
   static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error, errorInfo: null };
+    return { hasError: true, error, errorInfo: null, incidentId: null };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
-    this.setState({ error, errorInfo });
+    const incidentId = `cp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+    this.setState({ error, errorInfo, incidentId });
+    void fetch('/api/observability/client-error', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        incidentId,
+        message: error.message || String(error),
+        pathname: window.location.pathname,
+        componentStack: errorInfo.componentStack,
+      }),
+    }).catch(() => undefined);
     
     // Handle service errors
     if (error instanceof ServiceError) {
@@ -58,8 +70,9 @@ export class ErrorBoundary extends Component<Props, State> {
               </div>
               <h1 className="text-2xl font-bold mb-2">Something went wrong</h1>
               <p className="text-gray-400 mb-6">
-                We encountered an unexpected error. Don't worry, we're working to fix it.
+                We captured this error for the team. Try again; if it repeats, send us the reference below.
               </p>
+              {this.state.incidentId && <p className="mb-4 font-mono text-xs text-gray-500">Reference: {this.state.incidentId}</p>}
             </div>
             
             <div className="space-y-4">

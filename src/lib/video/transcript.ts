@@ -8,7 +8,7 @@ export interface TranscriptSegment {
   duration: number;
 }
 
-function extractJsonArray(value: string): unknown[] | null {
+export function extractJsonArray(value: string): unknown[] | null {
   const fenced = value.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1] || value;
   const start = fenced.indexOf('[');
   const end = fenced.lastIndexOf(']');
@@ -20,7 +20,7 @@ function extractJsonArray(value: string): unknown[] | null {
 }
 
 /** Gemini Interactions may return output_text or text nested in steps/content. */
-function extractGeminiText(body: Record<string, unknown>): string {
+export function extractGeminiText(body: Record<string, unknown>): string {
   if (typeof body.output_text === 'string') return body.output_text;
 
   const pieces: string[] = [];

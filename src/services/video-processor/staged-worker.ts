@@ -134,7 +134,9 @@ export async function advanceVideoProcessing(
   }
 
   if (!force) {
-    const lockMeta = { ...meta, tickLockUntil: Date.now() + 45_000 };
+    // Workspace polling advances one bounded stage at a time. Keep this short so
+    // a learner sees progress without allowing concurrent requests to overlap.
+    const lockMeta = { ...meta, tickLockUntil: Date.now() + 8_000 };
     await saveMeta(videoId, record, lockMeta);
   }
 
