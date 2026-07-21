@@ -31,6 +31,7 @@ type DashboardData = {
     type: string
     ownerClerkId?: string
     createdAt: string
+    payload?: Record<string, unknown>
   }>
   enrollments: Array<{
     id: string
@@ -89,6 +90,7 @@ export default function HrDashboardPage() {
   }
 
   const { stats, teamProgress, recentActivity, enrollments } = data
+  const reviewSignals = recentActivity.filter((event) => event.type.startsWith('skillproof.'))
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -206,6 +208,39 @@ export default function HrDashboardPage() {
                 </tbody>
               </table>
             </div>
+          )}
+        </section>
+
+        <section className="mt-8 rounded-xl border border-emerald-400/20 bg-emerald-400/[0.035] p-5">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">SkillProof review queue</p>
+              <h2 className="mt-1 font-medium">Evidence awaiting manager judgement</h2>
+              <p className="mt-1 text-sm text-zinc-400">Task signals help you review work. They are not an automatic hiring or performance decision.</p>
+            </div>
+            <span className="w-fit rounded-full border border-emerald-300/20 bg-emerald-300/10 px-2.5 py-1 text-xs text-emerald-100">{reviewSignals.length} signals</span>
+          </div>
+          {reviewSignals.length === 0 ? (
+            <p className="mt-4 text-sm text-zinc-500">Evidence will appear here when assigned learners complete task steps, save a snip or submit a reflection.</p>
+          ) : (
+            <ul className="mt-4 space-y-3">
+              {reviewSignals.slice(0, 10).map((signal) => {
+                const evidenceUrl = typeof signal.payload?.evidenceUrl === 'string' ? signal.payload.evidenceUrl : ''
+                const reflection = typeof signal.payload?.reflection === 'string' ? signal.payload.reflection : ''
+                const workspace = typeof signal.payload?.workspace === 'string' ? signal.payload.workspace : 'learning workspace'
+                return (
+                  <li key={signal.id} className="rounded-xl border border-white/10 bg-black/20 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-white">{signal.type.replace('skillproof.', '').replaceAll('_', ' ')}</p>
+                      <span className="text-xs text-zinc-500">{workspace} · {new Date(signal.createdAt).toLocaleString()}</span>
+                    </div>
+                    {reflection && <p className="mt-2 text-sm leading-6 text-zinc-300">{reflection}</p>}
+                    {evidenceUrl && <a className="mt-2 inline-block text-sm text-emerald-300 underline underline-offset-4 hover:text-emerald-200" href={evidenceUrl} target="_blank" rel="noreferrer">Open submitted evidence</a>}
+                    <p className="mt-3 text-xs text-zinc-500">Reviewer status: system evidence — a manager must review before verification.</p>
+                  </li>
+                )
+              })}
+            </ul>
           )}
         </section>
       </div>

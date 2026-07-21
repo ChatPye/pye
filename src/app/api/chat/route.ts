@@ -446,59 +446,44 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Use cached video data for better retrieval
-    let relevantSegments = [];
-    let videoData = null;
+    // Chat must work as soon as a transcript exists. Do not call our own protected
+    // processing endpoint here: server-side calls do not carry the user's Clerk
+    // session, and indexing can legitimately still be in progress.
+    let relevantSegments: Array<{ text: string; start: number; duration: number; score?: number }> = [];
+    let videoData: { transcript: Array<{ text: string; start: number; duration: number }>; embeddings: unknown[] } = {
+      transcript: transcriptToUse as Array<{ text: string; start: number; duration: number }>,
+      embeddings: [],
+    };
 
-    try {
-      // Try to get cached video data first
-      const videoResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/video/process?videoId=${videoId}`, {
-        headers: {
-          'Authorization': request.headers.get('Authorization') || ''
-        }
-      });
-
-      if (videoResponse.ok) {
-        const videoResult = await videoResponse.json();
-        videoData = videoResult.video;
-
-        // Verify video is truly ready: must have transcript AND embeddings
-        if (!videoData) {
-          logger.warn('Video data not found', { videoId })
-          return NextResponse.json({ error: 'Video is still being processed. Please try again shortly.' }, { status: 425 })
-        }
-
-        if (!videoData.transcript || !Array.isArray(videoData.transcript) || videoData.transcript.length === 0) {
-          logger.warn('Video transcript not ready', {
-            videoId,
-            status: videoData.processingStatus,
-            hasTranscript: !!videoData.transcript
-          })
-          return NextResponse.json({ error: 'Video transcript is still being generated. Please try again in a moment.' }, { status: 425 })
-        }
-
-        if (!videoData.embeddings || !Array.isArray(videoData.embeddings) || videoData.embeddings.length === 0) {
-          logger.warn('Video embeddings not ready', {
-            videoId,
-            status: videoData.processingStatus,
-            hasEmbeddings: !!videoData.embeddings?.length,
-            transcriptLength: videoData.transcript?.length
-          })
-          return NextResponse.json({ error: 'Video indexing is still in progress. Please try again in a moment.' }, { status: 425 })
-        }
-
-        // Use shared VectorSearchService for semantic search
-        const { VectorSearchService } = await import('@/services/vector-search');
-        relevantSegments = await VectorSearchService.searchTranscript(videoId as string, question);
-        logger.debug('Using vector search', { videoId, segmentCount: relevantSegments.length })
-      } else {
-        logger.warn('Video process endpoint failed', { videoId, status: videoResponse.status })
-        return NextResponse.json({ error: 'Video is initializing. Please try again shortly.' }, { status: 425 })
+    if (videoId) {
+      const videoRecord = await findVideoByExternalId(videoId);
+      if (videoRecord?.transcript?.length) {
+        videoData = {
+          transcript: videoRecord.transcript,
+          embeddings: videoRecord.embeddings ?? [],
+        };
       }
-    } catch (error) {
-      logger.error('Video data retrieval failed', error instanceof Error ? error : new Error(String(error)), { videoId })
-      return NextResponse.json({ error: 'Temporary issue loading video context. Please retry.' }, { status: 425 })
+
+      try {
+        const { VectorSearchService } = await import('@/services/vector-search');
+        relevantSegments = await VectorSearchService.searchTranscript(videoId, question);
+      } catch (error) {
+        logger.warn('Semantic retrieval unavailable; using transcript fallback', {
+          videoId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
+
+    // A transcript keyword fallback is always better than blocking the learner.
+    if (!relevantSegments.length) {
+      relevantSegments = findRelevantSegments(question, videoData.transcript);
+    }
+    logger.debug('Video context retrieved', {
+      videoId,
+      segmentCount: relevantSegments.length,
+      indexed: videoData.embeddings.length > 0,
+    });
 
     // Parallel processing: Extract code and enhance context simultaneously
     const [extractedCode, enhancedContext] = await Promise.all([

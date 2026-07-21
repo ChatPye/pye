@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/auth'
+import { recordLearningEvent } from '@/lib/db/learning-events'
 
 type Snip = {
   id: string
@@ -31,9 +33,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'text is required' }, { status: 400 })
     }
 
-    if (!isDevBypass && !process.env.DEV_FORCE_IN_MEMORY) {
-      // TODO: integrate real auth/user
-    }
+    const user = isDevBypass ? null : await requireAuth()
 
     const store = getStore()
     const snip: Snip = {
@@ -41,9 +41,22 @@ export async function POST(request: NextRequest) {
       text,
       codeLang,
       source,
+      createdBy: user?.id,
       createdAt: new Date().toISOString(),
     }
     store.push(snip)
+
+    const externalVideoId = typeof source === 'string' && source.startsWith('video:')
+      ? source.slice('video:'.length)
+      : undefined
+    if (user) {
+      await recordLearningEvent({
+        ownerClerkId: user.id,
+        type: 'skillproof.snip_saved',
+        externalVideoId,
+        payload: { snipId: snip.id, codeLang, textLength: text.length },
+      })
+    }
 
     return NextResponse.json({ ok: true, snip })
   } catch (_e) {
@@ -51,12 +64,14 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const isDevBypass = request.headers.get('X-Dev-Bypass') === 'true'
+    const user = isDevBypass ? null : await requireAuth()
     const store = getStore()
-    return NextResponse.json({ snips: store })
+    return NextResponse.json({ snips: user ? store.filter((snip) => snip.createdBy === user.id) : store })
   } catch (_e) {
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 })
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 }
 

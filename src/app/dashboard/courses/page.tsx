@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Loader2, Plus, Send } from 'lucide-react'
+import { ArrowLeft, Link2, Loader2, Plus, Send } from 'lucide-react'
 
 type Course = {
   id: string
@@ -23,6 +23,19 @@ export default function CoursesManagementPage() {
   const [assignEmails, setAssignEmails] = useState('')
   const [assigning, setAssigning] = useState(false)
   const [message, setMessage] = useState('')
+
+  const handleShareLink = async (courseId: string) => {
+    setMessage('')
+    try {
+      const response = await fetch(`/api/courses/${courseId}/share`, { method: 'POST' })
+      const data = await response.json()
+      if (!response.ok || !data.shareUrl) throw new Error(data.error || 'Unable to create learner link')
+      await navigator.clipboard.writeText(data.shareUrl)
+      setMessage('Learner link copied — recipients can accept or decline it.')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to create learner link')
+    }
+  }
 
   const loadCourses = async () => {
     const res = await fetch('/api/courses')
@@ -181,16 +194,7 @@ export default function CoursesManagementPage() {
                       {course.enrollmentCount ?? 0} assigned · {course.published ? 'Published' : 'Draft'}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setAssignCourseId(assignCourseId === course.id ? null : course.id)
-                    }
-                    className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 px-3 py-2 text-sm hover:bg-zinc-900"
-                  >
-                    <Send className="h-4 w-4" />
-                    Assign
-                  </button>
+                  <div className="flex flex-wrap gap-2"><button type="button" onClick={() => void handleShareLink(course.id)} className="inline-flex items-center gap-2 rounded-lg border border-emerald-400/30 px-3 py-2 text-sm text-emerald-100 hover:bg-emerald-400/10"><Link2 className="h-4 w-4" />Copy learner link</button><button type="button" onClick={() => setAssignCourseId(assignCourseId === course.id ? null : course.id)} className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 px-3 py-2 text-sm hover:bg-zinc-900"><Send className="h-4 w-4" />Assign</button></div>
                 </div>
 
                 {assignCourseId === course.id && (

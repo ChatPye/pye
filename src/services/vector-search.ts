@@ -20,8 +20,7 @@ export interface SearchResult {
 export class VectorSearchService {
   static async generateEmbedding(text: string): Promise<number[]> {
     if (!bedrockClient) {
-      console.warn('Bedrock client not available, returning mock embedding')
-      return Array.from({ length: 1536 }, () => Math.random() * 2 - 1)
+      throw new Error('Embedding provider is not configured')
     }
 
     try {
@@ -61,6 +60,7 @@ export class VectorSearchService {
     query: string,
     limit: number = 8
   ): Promise<SearchResult[]> {
+    let fallbackTranscript: Array<{ text: string; start: number; duration: number }> = []
     try {
       let video = await getVideoForSearch(videoId)
 
@@ -76,8 +76,10 @@ export class VectorSearchService {
         throw new Error('Video not found')
       }
 
-      if (!video.embeddings || video.embeddings.length === 0) {
-        return this.keywordSearch(video.transcript || [], query, limit)
+      fallbackTranscript = video.transcript || []
+
+      if (!bedrockClient || !video.embeddings || video.embeddings.length === 0) {
+        return this.keywordSearch(fallbackTranscript, query, limit)
       }
 
       const queryVector = await this.generateEmbedding(query)
@@ -97,7 +99,7 @@ export class VectorSearchService {
       return scoredSegments.sort((a, b) => b.score - a.score).slice(0, limit)
     } catch (error) {
       logger.error('Vector search failed:', error as Error)
-      return []
+      return this.keywordSearch(fallbackTranscript, query, limit)
     }
   }
 

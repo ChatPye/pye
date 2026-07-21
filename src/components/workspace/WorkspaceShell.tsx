@@ -4,6 +4,7 @@ import { useMemo, useState, useCallback, useRef, useEffect, ChangeEvent } from '
 import { createClip, createSnip, requestChapters, getChapters } from '@/lib/video-actions'
 import { uploadVideoFile } from '@/lib/upload-video'
 import { StudyPanel } from '@/components/workspace/StudyPanel'
+import { SkillProofTaskPanel } from '@/components/workspace/SkillProofTaskPanel'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import Image from 'next/image'
@@ -819,7 +820,7 @@ export default function WorkspaceShell({
     try {
       const result = await createClip(videoId, { start, duration, notes })
       if (result?.clip?.id) {
-        showActionToast('Clip created successfully')
+        showActionToast('Timestamp clip saved to your learning evidence')
         setActionStates(prev => ({ ...prev, clip: { loading: false, success: true } }))
         setTimeout(() => {
           setActionStates(prev => ({ ...prev, clip: { loading: false, success: false } }))
@@ -1570,6 +1571,8 @@ export default function WorkspaceShell({
         isActive={snipMode}
         onClose={() => setSnipMode(false)}
         onSnipComplete={handleSnipComplete}
+        videoElement={videoPlayerRef}
+        source={source}
       />
     </div>
   )
@@ -1988,37 +1991,49 @@ function ChapterCarousel({
 }) {
   if (!chapters || chapters.length === 0) {
     return (
-      <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-5 text-sm text-white/50">
-        Chapters will appear here once processing completes.
+      <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-5">
+        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/40">Learning map</p>
+        <p className="mt-2 text-sm text-white/65">Chapters are being prepared from the tutorial so you can jump to the right step, not scrub through the whole video.</p>
       </div>
     )
   }
 
+  const activeIndex = chapters.findIndex((chapter) => currentTime >= chapter.startTime && currentTime < chapter.startTime + chapter.duration)
+  const safeActiveIndex = activeIndex >= 0 ? activeIndex : 0
+  const activeChapter = chapters[safeActiveIndex]
+
   return (
-    <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.02] p-4">
+    <div className="overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-white/[0.055] to-white/[0.015] p-4">
       <div className="flex items-center justify-between pb-3">
         <div>
-          <p className="text-xs uppercase tracking-[0.35em] text-white/40">Chapters</p>
-          <h3 className="text-base font-semibold text-white">Quick navigation</h3>
+          <p className="text-xs uppercase tracking-[0.35em] text-emerald-200/60">Learning map</p>
+          <h3 className="text-base font-semibold text-white">Follow the tutorial by task</h3>
         </div>
+        <span className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] text-white/60">{safeActiveIndex + 1} / {chapters.length}</span>
       </div>
+      <button type="button" onClick={() => onSelectChapter(activeChapter.startTime)} className="mb-3 w-full rounded-2xl border border-emerald-300/25 bg-emerald-300/[0.06] p-3 text-left transition hover:bg-emerald-300/[0.1]">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-200/80">Now learning · {formatTimestamp(activeChapter.startTime)}</p>
+        <p className="mt-1 text-sm font-semibold text-white">{activeChapter.title}</p>
+        {activeChapter.description && <p className="mt-1 line-clamp-1 text-xs text-white/55">{activeChapter.description}</p>}
+      </button>
       <div className="flex gap-3 overflow-x-auto pb-1">
-        {chapters.map((chapter) => {
+        {chapters.map((chapter, index) => {
           const isActive = currentTime >= chapter.startTime && currentTime < chapter.startTime + chapter.duration
           return (
             <button
               key={chapter.id}
               onClick={() => onSelectChapter(chapter.startTime)}
+              aria-current={isActive ? 'step' : undefined}
               className={cx(
-                'min-w-[180px] rounded-2xl border px-4 py-3 text-left transition',
+                'min-w-[196px] rounded-2xl border px-4 py-3 text-left transition',
                 isActive
-                  ? 'border-white/40 bg-white/10 text-white'
-                  : 'border-white/10 bg-white/[0.04] text-white/70 hover:border-white/25 hover:text-white'
+                  ? 'border-emerald-300/50 bg-emerald-300/[0.12] text-white shadow-lg shadow-emerald-950/20'
+                  : 'border-white/10 bg-black/10 text-white/70 hover:border-white/25 hover:bg-white/[0.06] hover:text-white'
               )}
             >
-              <div className="flex items-center gap-2 text-xs uppercase tracking-[0.25em] text-white/50">
-                <CircleDot className="h-3 w-3" />
-                {formatTimestamp(chapter.startTime)}
+              <div className="flex items-center justify-between gap-2 text-xs uppercase tracking-[0.2em] text-white/50">
+                <span className="flex items-center gap-2"><CircleDot className="h-3 w-3" /> Step {index + 1}</span>
+                <span>{formatTimestamp(chapter.startTime)}</span>
               </div>
               <p className="mt-2 text-sm font-semibold text-white/90">{chapter.title}</p>
               {chapter.description && <p className="mt-1 text-xs text-white/50 line-clamp-2">{chapter.description}</p>}
@@ -2123,7 +2138,7 @@ function ActionBar({
     },
     { 
       id: 'clip', 
-      label: 'Clip', 
+      label: 'Save clip',
       icon: Video, 
       onClick: onClip,
       state: actionStates.clip,
@@ -2813,6 +2828,7 @@ function ChatSidebar({
           </div>
         )}
       </div>
+      <SkillProofTaskPanel videoId={videoId} />
     </aside>
   )
 }
