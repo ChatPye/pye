@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { createVideoShare } from '@/server/memory/videoShares'
 import { getPlanLimits, getInviteCountForTenant, getUserPlanAndTenant } from '@/lib/plans'
+import { createShareLink } from '@/lib/db/share-repository'
+import { isDatabaseConfigured } from '@/lib/db'
+import { randomUUID } from 'crypto'
 
 export async function POST(request: NextRequest) {
   try {
@@ -31,12 +34,23 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const rec = createVideoShare({
-      videoId,
-      access,
-      ownerUserId: userId || undefined,
-      expiresAt: expiresIn ? Date.now() + Math.max(0, expiresIn) : undefined,
-    })
+    const expiresAt = expiresIn ? new Date(Date.now() + Math.max(0, expiresIn)) : undefined
+    const rec = isDatabaseConfigured() && userId
+      ? await createShareLink({
+          shareId: `vshare_${randomUUID().replace(/-/g, '').slice(0, 16)}`,
+          ownerClerkId: userId,
+          externalVideoId: videoId,
+          type: `video:${access}`,
+          content: JSON.stringify({ access, managerCanReviewEvidence: true }),
+          expiresAt,
+          createdAt: new Date(),
+        })
+      : createVideoShare({
+          videoId,
+          access,
+          ownerUserId: userId || undefined,
+          expiresAt: expiresAt?.getTime(),
+        })
     const base = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
     const shareUrl = `${base}/video/share/${rec.shareId}`
     return NextResponse.json({ success: true, shareId: rec.shareId, shareUrl })

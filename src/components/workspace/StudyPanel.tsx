@@ -11,6 +11,7 @@ type QuizQuestion = {
 type Flashcard = { front: string; back: string };
 
 export function StudyPanel({ videoId }: { videoId?: string }) {
+  const [mode, setMode] = useState<'quiz' | 'flashcards' | null>(null);
   const [quizLoading, setQuizLoading] = useState(false);
   const [cardLoading, setCardLoading] = useState(false);
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
@@ -21,8 +22,33 @@ export function StudyPanel({ videoId }: { videoId?: string }) {
   const [flipped, setFlipped] = useState(false);
   const [error, setError] = useState('');
 
+  const clearQuiz = useCallback(() => {
+    setQuestions([]);
+    setAnswers({});
+    setScore(null);
+  }, []);
+
+  const clearFlashcards = useCallback(() => {
+    setCards([]);
+    setCardIndex(0);
+    setFlipped(false);
+  }, []);
+
+  const switchMode = useCallback((next: 'quiz' | 'flashcards') => {
+    if (mode && mode !== next) {
+      const label = mode === 'quiz' ? 'quiz' : 'flashcards';
+      if (!window.confirm(`Switch to ${next}? Your current ${label} view will be cleared.`)) return false;
+      if (mode === 'quiz') clearQuiz();
+      else clearFlashcards();
+    }
+    setMode(next);
+    setError('');
+    return true;
+  }, [clearFlashcards, clearQuiz, mode]);
+
   const loadQuiz = useCallback(async () => {
     if (!videoId) return;
+    if (!switchMode('quiz')) return;
     setQuizLoading(true);
     setError('');
     setScore(null);
@@ -50,24 +76,38 @@ export function StudyPanel({ videoId }: { videoId?: string }) {
     } finally {
       setQuizLoading(false);
     }
-  }, [videoId]);
+  }, [switchMode, videoId]);
 
-  const submitQuiz = useCallback(() => {
+  const submitQuiz = useCallback(async () => {
     let correct = 0;
     questions.forEach((q, i) => {
       if (answers[`quiz_q_${i}`] === q.correct) correct += 1;
     });
     setScore({ correct, total: questions.length });
-    fetch('/api/xp', {
+    const evidence = questions.map((q, i) => ({
+      question: q.question,
+      selected: answers[`quiz_q_${i}`] ?? null,
+      correct: q.correct,
+    }));
+    await fetch('/api/skillproof/evidence', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ action: 'quiz_completed', metadata: { videoId, correct } }),
+      body: JSON.stringify({
+        videoId,
+        workspace: 'general',
+        action: 'skillproof.quiz_completed',
+        score: correct,
+        total: questions.length,
+        answers: evidence,
+        reflection: `Completed the generated quiz with ${correct} out of ${questions.length} correct.`,
+      }),
     }).catch(() => null);
   }, [answers, questions, videoId]);
 
   const loadFlashcards = useCallback(async () => {
     if (!videoId) return;
+    if (!switchMode('flashcards')) return;
     setCardLoading(true);
     setError('');
     setCardIndex(0);
@@ -95,7 +135,22 @@ export function StudyPanel({ videoId }: { videoId?: string }) {
     } finally {
       setCardLoading(false);
     }
-  }, [videoId]);
+  }, [switchMode, videoId]);
+
+  const completeFlashcards = useCallback(() => {
+    fetch('/api/skillproof/evidence', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        videoId,
+        workspace: 'general',
+        action: 'skillproof.flashcards_reviewed',
+        total: cards.length,
+        reflection: `Reviewed ${cards.length} flashcards generated from this tutorial.`,
+      }),
+    }).catch(() => null);
+  }, [cards.length, videoId]);
 
   if (!videoId) return null;
 
@@ -104,12 +159,12 @@ export function StudyPanel({ videoId }: { videoId?: string }) {
       <h4 className="text-sm font-semibold text-white">Study tools</h4>
       {error && <p className="text-xs text-rose-400">{error}</p>}
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Study tools">
         <button
           type="button"
           onClick={loadQuiz}
           disabled={quizLoading}
-          className="rounded-lg border border-violet-500/40 bg-violet-500/10 px-3 py-1.5 text-xs text-violet-200 hover:bg-violet-500/20 disabled:opacity-50"
+          className={`rounded-lg border px-3 py-1.5 text-xs hover:bg-violet-500/20 disabled:opacity-50 ${mode === 'quiz' ? 'border-violet-300 bg-violet-500/25 text-white' : 'border-violet-500/40 bg-violet-500/10 text-violet-200'}`}
         >
           {quizLoading ? 'Generating quiz…' : questions.length ? 'Regenerate quiz' : 'Generate quiz'}
         </button>
@@ -117,13 +172,13 @@ export function StudyPanel({ videoId }: { videoId?: string }) {
           type="button"
           onClick={loadFlashcards}
           disabled={cardLoading}
-          className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-1.5 text-xs text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-50"
+          className={`rounded-lg border px-3 py-1.5 text-xs hover:bg-cyan-500/20 disabled:opacity-50 ${mode === 'flashcards' ? 'border-cyan-300 bg-cyan-500/25 text-white' : 'border-cyan-500/40 bg-cyan-500/10 text-cyan-200'}`}
         >
           {cardLoading ? 'Generating cards…' : cards.length ? 'Regenerate flashcards' : 'Generate flashcards'}
         </button>
       </div>
 
-      {questions.length > 0 && (
+      {mode === 'quiz' && questions.length > 0 && (
         <div className="space-y-3">
           {questions.map((q, i) => (
             <div key={i} className="rounded-lg border border-zinc-800 p-3 text-sm">
@@ -164,7 +219,7 @@ export function StudyPanel({ videoId }: { videoId?: string }) {
         </div>
       )}
 
-      {cards.length > 0 && (
+      {mode === 'flashcards' && cards.length > 0 && (
         <div className="space-y-2">
           <button
             type="button"
@@ -202,6 +257,13 @@ export function StudyPanel({ videoId }: { videoId?: string }) {
               </button>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={completeFlashcards}
+            className="rounded-lg border border-cyan-500/40 px-3 py-1.5 text-xs text-cyan-200 hover:bg-cyan-500/10"
+          >
+            Save review as evidence
+          </button>
         </div>
       )}
     </div>

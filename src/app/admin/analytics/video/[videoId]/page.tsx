@@ -4,6 +4,7 @@ import { useParams } from 'next/navigation'
 
 type PromptItem = { promptId: string; count: number }
 type QuestionItem = { question: string; count: number }
+type EvidenceItem = { ownerClerkId?: string; type: string; payload?: Record<string, unknown>; createdAt?: string }
 
 export default function VideoAnalyticsPage() {
   const params = useParams<{ videoId: string }>()
@@ -11,21 +12,25 @@ export default function VideoAnalyticsPage() {
   const [prompts, setPrompts] = useState<PromptItem[]>([])
   const [questions, setQuestions] = useState<QuestionItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [evidence, setEvidence] = useState<EvidenceItem[]>([])
 
   useEffect(() => {
     if (!videoId) return
     let ignore = false
     ;(async () => {
       try {
-        const [pRes, qRes] = await Promise.all([
+        const [pRes, qRes, eRes] = await Promise.all([
           fetch(`/api/prompts/top?videoId=${encodeURIComponent(videoId)}&limit=10`),
           fetch(`/api/questions/top?videoId=${encodeURIComponent(videoId)}&limit=10`),
+          fetch(`/api/video/${encodeURIComponent(videoId)}/evidence`),
         ])
         const pData = await pRes.json()
         const qData = await qRes.json()
+        const eData = await eRes.json().catch(() => ({ evidence: [] }))
         if (!ignore) {
           setPrompts(pData?.results || [])
           setQuestions(qData?.results || [])
+          setEvidence(eData?.evidence || [])
         }
       } finally {
         if (!ignore) setLoading(false)
@@ -77,6 +82,7 @@ export default function VideoAnalyticsPage() {
           </div>
         </div>
       )}
+      {!loading && <div className="mt-6 rounded-xl border border-emerald-300/20 bg-emerald-300/[0.04] p-4"><h2 className="font-semibold">Learner evidence</h2><p className="mt-1 text-sm text-zinc-400">Quiz results, task evidence, reflections and repository assessments shared through this video.</p>{evidence.length === 0 ? <p className="mt-4 text-sm text-zinc-500">No learner evidence yet.</p> : <ul className="mt-4 space-y-3">{evidence.map((item, index) => <li key={`${item.ownerClerkId}-${index}`} className="rounded-lg border border-white/10 bg-black/30 p-3 text-sm"><div className="flex justify-between gap-3"><span className="font-medium text-emerald-100">{item.type.replaceAll('_', ' ')}</span><span className="text-xs text-zinc-500">{item.createdAt ? new Date(item.createdAt).toLocaleString() : ''}</span></div><p className="mt-2 whitespace-pre-wrap text-xs text-zinc-300">{JSON.stringify(item.payload ?? {}, null, 2)}</p></li>)}</ul>}</div>}
     </div>
   )
 }

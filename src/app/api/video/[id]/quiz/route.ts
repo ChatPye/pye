@@ -3,7 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import { findVideoByExternalId } from '@/lib/db/video-repository';
 import { requireAurora } from '@/lib/db/require-aurora';
 import { getDb, schema } from '@/lib/db';
-import { generateQuizFromTranscript } from '@/lib/learning/quiz-generator';
+import { generateGeminiQuiz } from '@/lib/learning/gemini-study';
 import { eq, and } from 'drizzle-orm';
 
 export async function GET(
@@ -64,7 +64,7 @@ export async function POST(
     }
 
     const transcriptText = (record.transcript ?? []).map((s) => s.text).join(' ');
-    const questions = await generateQuizFromTranscript(transcriptText, 10);
+    const questions = await generateGeminiQuiz(transcriptText, 5);
 
     const db = getDb();
     await db.insert(schema.videoQuizzes).values({

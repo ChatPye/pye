@@ -13,6 +13,7 @@ import { isUploadVideoId } from '@/lib/video-upload-utils'
 import { sanitizeVideoForClient } from '@/lib/video/client-video'
 import { scheduleVideoProcessing } from '@/lib/video/schedule-processing'
 import { processingProgressFor } from '@/services/video-processor/staged-worker'
+import { recordLearningEvent } from '@/lib/db/learning-events'
 
 type SourceType = 'youtube' | 'upload'
 
@@ -265,6 +266,12 @@ export async function GET(request: NextRequest) {
     }
 
     const updated = await incrementVideoAccess(videoId)
+
+    await recordLearningEvent({
+      ownerClerkId: authUser.id,
+      type: 'video.viewed',
+      externalVideoId: videoId,
+    })
 
     if (video.ownerId && video.ownerId !== authUser.id) {
       console.warn('[VideoProcess] User accessing video they do not own', {

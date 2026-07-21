@@ -2,11 +2,13 @@
 
 import { CheckCircle2, ExternalLink, Lightbulb, Loader2, Sparkles } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 
 type WorkspaceKind = 'vscode' | 'excel' | 'general'
 type ProcessingStatus = 'queued' | 'pending' | 'extracting' | 'transcribing' | 'embedding' | 'complete' | 'failed'
 type Task = { title: string; instruction: string; evidence: string; reflectionPrompt?: string; timestamp?: number }
 type Plan = { workspace: WorkspaceKind; goal: string; steps: Task[]; quiz: { question: string; answer: string }[]; generatedBy: 'gemini' | 'transcript-fallback' }
+type Competency = { name: string; level: string; progress: number; evidence?: string[] }
 
 function workspaceLabel(kind: WorkspaceKind) {
   if (kind === 'vscode') return 'VS Code build workspace'
@@ -25,6 +27,10 @@ export function SkillProofTaskPanel({ videoId, processingStatus }: { videoId?: s
   const [evidenceStepIndex, setEvidenceStepIndex] = useState(0)
   const [saved, setSaved] = useState('')
   const [error, setError] = useState('')
+  const [repoAssessing, setRepoAssessing] = useState(false)
+  const [repoResult, setRepoResult] = useState('')
+  const [competencyStatus, setCompetencyStatus] = useState<'idle' | 'processing' | 'ready' | 'deferred'>('idle')
+  const [competencies, setCompetencies] = useState<Competency[]>([])
 
   useEffect(() => {
     if (!videoId || processingStatus !== 'complete') return
@@ -43,12 +49,29 @@ export function SkillProofTaskPanel({ videoId, processingStatus }: { videoId?: s
     return () => controller.abort()
   }, [videoId, processingStatus])
 
+  const processCompetencies = async () => {
+    if (!videoId) return
+    setCompetencyStatus('processing')
+    try {
+      const response = await fetch('/api/competencies/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ videoId }) })
+      const data = await response.json()
+      if (data.analysisStatus === 'deferred') { setCompetencyStatus('deferred'); return }
+      if (!response.ok || !data.success) throw new Error(data.error || 'Competency analysis failed')
+      setCompetencies(data.competencies ?? [])
+      setCompetencyStatus('ready')
+    } catch (reason) {
+      setCompetencyStatus('deferred')
+      setError(reason instanceof Error ? reason.message : 'Evidence is saved; competency review will resume shortly.')
+    }
+  }
+
   const record = async (action: string, payload: Record<string, unknown> = {}) => {
     if (!videoId || !plan) return
     const response = await fetch('/api/skillproof/evidence', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ videoId, workspace: plan.workspace, action, ...payload }) })
     if (response.ok) {
       setSaved('Saved as competency evidence')
       setError('')
+      if (action === 'skillproof.evidence_submitted' || action === 'skillproof.reflection_submitted') void processCompetencies()
     } else {
       const data = await response.json().catch(() => null)
       setError(data?.error || 'We could not save that evidence. Please try again.')
@@ -60,6 +83,19 @@ export function SkillProofTaskPanel({ videoId, processingStatus }: { videoId?: s
     if (!current.includes(index)) void record('skillproof.step_completed', { stepIndex: index, stepTitle: plan?.steps[index]?.title })
     return next
   })
+
+  const assessRepository = async () => {
+    if (!evidenceUrl.trim()) return setError('Add a public GitHub repository URL first.')
+    setRepoAssessing(true); setError(''); setRepoResult('')
+    try {
+      const response = await fetch('/api/skillproof/assess-repo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ videoId, repoUrl: evidenceUrl }) })
+      const data = await response.json()
+      if (!response.ok || !data.success) throw new Error(data.error || 'Repository assessment failed')
+      const scores = (data.assessment?.competencies ?? []).map((item: { name?: string; score?: number }) => `${item.name}: ${item.score}%`).join(' · ')
+      setRepoResult(data.assessment?.summary || scores || 'Repository assessed and saved as competency evidence.')
+      setSaved('Repository assessment saved as competency evidence')
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Repository assessment failed') } finally { setRepoAssessing(false) }
+  }
 
   if (processingStatus !== 'complete') {
     return <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-zinc-400"><Loader2 className="mr-2 inline h-4 w-4 animate-spin" />SkillProof is reading this tutorial to create a tailored task plan.</section>
@@ -97,8 +133,12 @@ export function SkillProofTaskPanel({ videoId, processingStatus }: { videoId?: s
         <p className="text-xs text-zinc-400"><span className="font-medium text-zinc-200">What counts as proof:</span> {plan.steps[evidenceStepIndex]?.evidence}</p>
         <input value={evidenceUrl} onChange={(event) => setEvidenceUrl(event.target.value)} placeholder="GitHub, workbook, document or demo link" className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white" />
         <textarea value={reflection} onChange={(event) => setReflection(event.target.value)} placeholder={plan.steps[evidenceStepIndex]?.reflectionPrompt || 'Explain what you built, why you made those choices, and how you checked it.'} className="min-h-24 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white" />
-        <button type="button" onClick={() => { const step = plan.steps[evidenceStepIndex]; void record('skillproof.evidence_submitted', { evidenceUrl, reflection, stepIndex: evidenceStepIndex, stepTitle: step?.title, expectedEvidence: step?.evidence }); }} className="rounded-lg border border-emerald-400/40 px-3 py-2 text-xs text-emerald-100">Save evidence</button>
+        <div className="flex flex-wrap gap-2"><button type="button" onClick={() => { const step = plan.steps[evidenceStepIndex]; void record('skillproof.evidence_submitted', { evidenceUrl, reflection, stepIndex: evidenceStepIndex, stepTitle: step?.title, expectedEvidence: step?.evidence }); }} className="rounded-lg border border-emerald-400/40 px-3 py-2 text-xs text-emerald-100">Save evidence</button><button type="button" disabled={repoAssessing || !/github\.com\//i.test(evidenceUrl)} onClick={assessRepository} className="rounded-lg border border-violet-400/40 px-3 py-2 text-xs text-violet-100 disabled:opacity-40">{repoAssessing ? 'Assessing repository…' : 'Assess GitHub proof'}</button></div>
+        {repoResult && <p className="text-xs text-violet-200">{repoResult}</p>}
       </div>}
+      {competencyStatus === 'processing' && <div className="mt-3 flex items-center gap-2 rounded-xl border border-violet-300/20 bg-violet-300/[0.06] p-3 text-xs text-violet-100"><Loader2 className="h-4 w-4 animate-spin" />Your proof is saved. SkillProof is now mapping it to competencies…</div>}
+      {competencyStatus === 'ready' && <div className="mt-3 rounded-xl border border-emerald-300/25 bg-emerald-300/[0.06] p-3"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold text-emerald-100">Competency evidence updated</p><p className="mt-1 text-xs text-zinc-300">This evidence is now visible in your competency profile and to an assigned learning manager.</p></div><Link href="/workspace/competencies" className="shrink-0 text-xs font-medium text-emerald-200 underline">View profile</Link></div>{competencies.length > 0 && <div className="mt-3 grid gap-2 sm:grid-cols-2">{competencies.slice(0, 4).map((competency) => <div key={competency.name} className="rounded-lg border border-white/10 bg-black/20 p-2"><p className="text-xs font-medium text-white">{competency.name}</p><p className="mt-1 text-[11px] capitalize text-zinc-400">{competency.level} · {competency.progress}%</p></div>)}</div>}</div>}
+      {competencyStatus === 'deferred' && <div className="mt-3 rounded-xl border border-amber-300/20 bg-amber-300/[0.05] p-3 text-xs text-amber-100">Your evidence is safely saved. Competency review is queued; return to <Link href="/workspace/competencies" className="underline">My competencies</Link> shortly to see the updated profile.</div>}
       {saved && <p className="mt-2 text-xs text-emerald-300">{saved}</p>}
     </section>
   )

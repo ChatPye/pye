@@ -1,6 +1,8 @@
-# ChatPye
+# SkillProof Studio by ChatPye
 
-AI-powered learning & development platform. Chat with training videos, build verified competencies, and share skill profiles with HR and leadership.
+AI-powered learning and workforce-development platform. Turn a training video into an interactive tutor, practical task plan, evidence-backed competency profile and manager-ready review.
+
+> **OpenAI Build Week:** This project builds on prior ChatPye work. The Build Week additions and Codex/GPT-5.6 evidence are documented in [docs/hackathon/OPENAI_BUILD_WEEK_EVIDENCE.md](docs/hackathon/OPENAI_BUILD_WEEK_EVIDENCE.md).
 
 **Release date:** 28 June 2026  
 **Deploy target:** Vercel + Amazon Aurora PostgreSQL + S3 + Bedrock
