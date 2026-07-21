@@ -23,6 +23,7 @@ export async function POST(request: NextRequest) {
     const payload: Record<string, unknown> = { workspace }
     if (typeof body.stepIndex === 'number') payload.stepIndex = body.stepIndex
     if (typeof body.stepTitle === 'string') payload.stepTitle = body.stepTitle.slice(0, 200)
+    if (typeof body.expectedEvidence === 'string') payload.expectedEvidence = body.expectedEvidence.slice(0, 500)
     if (typeof body.evidenceUrl === 'string') payload.evidenceUrl = body.evidenceUrl.slice(0, 2000)
     if (typeof body.reflection === 'string') payload.reflection = body.reflection.slice(0, 2000)
 

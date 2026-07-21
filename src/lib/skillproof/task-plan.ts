@@ -8,6 +8,7 @@ export type SkillProofTask = {
   title: string
   instruction: string
   evidence: string
+  reflectionPrompt: string
   timestamp?: number
 }
 
@@ -37,6 +38,7 @@ function cleanTask(value: unknown, index: number): SkillProofTask | null {
     title: title.slice(0, 120),
     instruction: instruction.slice(0, 500),
     evidence: String(item.evidence ?? 'Add a link or short explanation showing this step is complete.').trim().slice(0, 300),
+    reflectionPrompt: String(item.reflectionPrompt ?? 'Explain the decision you made, why it was appropriate, and one thing you would check next.').trim().slice(0, 400),
     ...(Number.isFinite(timestamp) && timestamp >= 0 ? { timestamp } : {}),
   }
 }
@@ -51,19 +53,21 @@ function fallbackPlan(video: VideoRecord): SkillProofTaskPlan {
         title: chapter.title || 'Complete this section',
         instruction: chapter.summary || `Follow the tutorial section and reproduce the outcome in your ${workspace === 'excel' ? 'workbook' : workspace === 'vscode' ? 'project' : 'own workspace'}.`,
         evidence: 'Add a link, screenshot, or brief explanation of the result.',
+        reflectionPrompt: 'What did you create in this section, and how does it support the final outcome?',
         timestamp: chapter.start,
       }))
     : transcript.filter((_, index) => index % Math.max(1, Math.ceil(transcript.length / 5)) === 0).slice(0, 5).map((segment, index) => ({
         title: `Build step ${index + 1}`,
         instruction: segment.text,
         evidence: 'Add a link, screenshot, or brief explanation of the result.',
+        reflectionPrompt: 'What did you learn from this step, and how did you apply it?',
         timestamp: segment.start,
       }))
 
   return {
     workspace,
     goal: video.description || `Complete the practical outcome taught in ${video.title || 'this tutorial'}.`,
-    steps: sourceSteps.length ? sourceSteps : [{ title: 'Explain the intended outcome', instruction: 'Use the tutor to identify the practical outcome of this video, then create it in your own workspace.', evidence: 'Write a short explanation and attach your work.' }],
+    steps: sourceSteps.length ? sourceSteps : [{ title: 'Explain the intended outcome', instruction: 'Use the tutor to identify the practical outcome of this video, then create it in your own workspace.', evidence: 'Write a short explanation and attach your work.', reflectionPrompt: 'What outcome are you trying to create, and what evidence would show that it works?' }],
     quiz: [{ question: 'What is the first outcome you need to create?', answer: 'Answer using the opening section of the tutorial.' }],
     generatedBy: 'transcript-fallback',
   }
@@ -111,4 +115,3 @@ export async function generateSkillProofTaskPlan(video: VideoRecord): Promise<Sk
     return fallback
   }
 }
-

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { requireAurora } from '@/lib/db/require-aurora';
 import {
   deletePod,
   findPodByExternalId,
@@ -19,7 +18,6 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    requireAurora('Pods');
     const { podId } = await params;
     const pod = await findPodByExternalId(podId);
 
@@ -48,7 +46,6 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    requireAurora('Pods');
     const { podId } = await params;
     const body: UpdatePodRequest = await request.json();
     const pod = await findPodByExternalId(podId);
@@ -93,7 +90,6 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    requireAurora('Pods');
     const { podId } = await params;
     const pod = await findPodByExternalId(podId);
 

@@ -1590,7 +1590,7 @@ function WorkspaceSidebar({
 }) {
   const joinedPodsMemo = useMemo(() => state.joinedPods.slice(0, 5), [state.joinedPods])
   const ownedPodsMemo = useMemo(() => state.ownedPods.slice(0, 5), [state.ownedPods])
-  const recentVideosMemo = useMemo(() => state.recentVideos.slice(0, 15), [state.recentVideos])
+  const recentVideosMemo = useMemo(() => state.recentVideos.slice(0, 8), [state.recentVideos])
   const widthClass = collapsed && !isMobile ? 'lg:w-20' : 'lg:w-80'
   const displayNameClass = collapsed && !isMobile ? 'hidden' : 'block'
 
@@ -1698,7 +1698,7 @@ function WorkspaceSidebar({
         )}
 
         <SidebarSectionHeader collapsed={collapsed} title="Recent video pages" />
-        <div className="space-y-2">
+        <div className="max-h-72 space-y-2 overflow-y-auto pr-1 [scrollbar-width:thin]">
           {recentVideosMemo.length === 0 ? (
             !collapsed && (
               <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-4 text-xs text-white/40">
@@ -1727,7 +1727,7 @@ function WorkspaceSidebar({
               </Link>
             ))
           )}
-          {!collapsed && state.recentVideos.length > 15 && (
+          {!collapsed && state.recentVideos.length > 8 && (
             <div className="mt-2">
               <Link href="/workspace" className="text-[11px] text-blue-400 hover:text-blue-300 px-2">See all</Link>
             </div>

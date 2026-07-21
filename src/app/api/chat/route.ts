@@ -14,6 +14,7 @@ import {
 import { DEMO_VIDEO_ID, DEMO_CACHED_RESPONSES, DEMO_TRANSCRIPT } from '@/data/demo-transcript';
 import { extractCodeFromTranscript, combineCodeSources } from '@/lib/code-extraction';
 import { ocrService } from '@/lib/ocr-service';
+import { extractGeminiText } from '@/lib/video/transcript';
 
 // Force dynamic rendering for API routes
 export const dynamic = 'force-dynamic';
@@ -464,14 +465,19 @@ export async function POST(request: NextRequest) {
         };
       }
 
-      try {
-        const { VectorSearchService } = await import('@/services/vector-search');
-        relevantSegments = await VectorSearchService.searchTranscript(videoId, question);
-      } catch (error) {
-        logger.warn('Semantic retrieval unavailable; using transcript fallback', {
-          videoId,
-          error: error instanceof Error ? error.message : String(error),
-        });
+      // Semantic retrieval is an enhancement, never a dependency. Bedrock can be
+      // rate-limited during a live pilot, so transcript keyword context remains the
+      // fast default unless an enterprise explicitly enables Bedrock retrieval.
+      if (process.env.CHAT_RETRIEVAL_PROVIDER === 'bedrock') {
+        try {
+          const { VectorSearchService } = await import('@/services/vector-search');
+          relevantSegments = await VectorSearchService.searchTranscript(videoId, question);
+        } catch (error) {
+          logger.warn('Semantic retrieval unavailable; using transcript fallback', {
+            videoId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
     }
 
@@ -527,15 +533,6 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Check if Bedrock is available
-    if (!bedrockClient) {
-      // Fallback response when Bedrock is not available
-      const fallbackResponse = generateFallbackResponse(question, relevantSegments);
-      if (redis) { try { await redis.setex(cacheKey, CHAT_TTL_SECONDS, fallbackResponse); await recordQuestion(redis, videoId, question) } catch { } }
-      else { memory.set(cacheKey, { data: fallbackResponse, ts: Date.now() }) }
-      return streamResponse(fallbackResponse);
-    }
-
     // Log learning event when chat uses verified video context
     const authUser = await getUser();
     if (authUser?.id && videoId) {
@@ -547,11 +544,22 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // Gemini is the launch provider for video chat. It is fast, understands the
+    // transcript context and keeps a Bedrock quota issue from taking down the
+    // learner experience. Bedrock remains an opt-in enterprise fallback.
+    const useBedrock = process.env.CHAT_PROVIDER === 'bedrock' && Boolean(bedrockClient)
+    if (!useBedrock) {
+      const responseText = await generateGeminiChatResponse(prompt, question, relevantSegments)
+      if (redis) { try { await redis.setex(cacheKey, CHAT_TTL_SECONDS, responseText); await recordQuestion(redis, videoId, question) } catch { } }
+      else { memory.set(cacheKey, { data: responseText, ts: Date.now() }) }
+      return streamResponse(responseText)
+    }
+
     const modelId = await resolveChatModel(authUser?.id, prompt.length);
     const command = createBedrockStreamCommand(modelId, prompt);
 
     // Create a readable stream for the response
-    const response = await bedrockClient.send(command);
+    const response = await bedrockClient!.send(command);
 
     const stream = new ReadableStream({
       start(controller) {
@@ -731,6 +739,40 @@ function streamResponse(text: string) {
       'Connection': 'keep-alive',
     },
   });
+}
+
+async function generateGeminiChatResponse(
+  prompt: string,
+  question: string,
+  relevantSegments: Array<{ text: string; start: number; duration: number }>
+): Promise<string> {
+  const apiKey = process.env.GEMINI_API_KEY
+  if (!apiKey) return generateFallbackResponse(question, relevantSegments)
+
+  try {
+    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+      body: JSON.stringify({
+        model: process.env.GEMINI_CHAT_MODEL || process.env.GEMINI_VIDEO_MODEL || 'gemini-3.6-flash',
+        input: [{
+          type: 'text',
+          text: `${prompt}\n\nLearner question: ${question}\n\nRespond directly and use [MM:SS] references when the supplied video context supports them. Do not claim to have watched anything outside the supplied context.`,
+        }],
+      }),
+    })
+
+    if (!response.ok) throw new Error(`Gemini returned ${response.status}`)
+    const body = await response.json() as Record<string, unknown>
+    const text = extractGeminiText(body).trim()
+    if (!text) throw new Error('Gemini returned an empty response')
+    return text.slice(0, 12000)
+  } catch (error) {
+    logger.warn('Gemini chat unavailable; using transcript response', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return generateFallbackResponse(question, relevantSegments)
+  }
 }
 
 function generateFallbackResponse(question: string, relevantSegments: any[]): string {
