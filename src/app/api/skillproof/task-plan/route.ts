@@ -14,7 +14,12 @@ export async function GET(request: NextRequest) {
 
     const video = await findVideoByExternalId(videoId)
     if (!video) return NextResponse.json({ success: false, error: 'Video not found' }, { status: 404 })
-    if (video.ownerId && video.ownerId !== user.id) return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
+    // A completed public YouTube tutorial is reusable learning material. Private
+    // uploads and unfinished jobs remain visible only to their owner.
+    const reusablePublicVideo = video.source === 'youtube' && video.processingStatus === 'complete'
+    if (video.ownerId && video.ownerId !== user.id && !reusablePublicVideo) {
+      return NextResponse.json({ success: false, error: 'This private video is not shared with you' }, { status: 403 })
+    }
     if (!video.transcript?.length) {
       return NextResponse.json({ success: false, processing: true, error: 'Task plan will be ready when video processing completes' }, { status: 202 })
     }
