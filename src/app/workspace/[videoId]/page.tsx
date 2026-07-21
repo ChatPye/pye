@@ -240,12 +240,23 @@ function WorkspaceVideoPage() {
       setLoadError(null);
       setIsProcessing(true);
 
-      await fetch('/api/video/process', {
+      const startResponse = await fetch('/api/video/process', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ videoId: rawVideoId, source: resolvedSource }),
       }).catch(() => null);
+
+      if (!startResponse?.ok) {
+        const data = await startResponse?.json().catch(() => null);
+        if (startResponse?.status === 402) {
+          setProcessingError(data?.details || 'Your video-processing limit has been reached. Upgrade your plan or open an existing learning video.');
+        } else {
+          setProcessingError(data?.error || 'We could not start processing this video. Please try again.');
+        }
+        setIsProcessing(false);
+        return;
+      }
 
       if (cancelled) return;
 

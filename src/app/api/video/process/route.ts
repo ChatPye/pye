@@ -181,10 +181,19 @@ export async function POST(request: NextRequest) {
       const planLimits = getPlanLimits(planInfo.plan)
       const rawLimit = planLimits?.videosPerMonth
       const numericLimit = typeof rawLimit === 'string' ? Number(rawLimit) : rawLimit
+      // Keep the public SkillProof demo reproducible while preserving normal
+      // plan enforcement. Set SKILLPROOF_DEMO_VIDEO_IDS to extend/replace this
+      // list in a hosted environment.
+      const demoVideoIds = (process.env.SKILLPROOF_DEMO_VIDEO_IDS || 'bTMPwUgLZf0')
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean)
+      const isDemoVideo = source === 'youtube' && demoVideoIds.includes(videoId)
       if (
         numericLimit !== undefined &&
         !Number.isNaN(Number(numericLimit)) &&
         Number(numericLimit) >= 0
+        && !isDemoVideo
       ) {
         const maxVideos = Number(numericLimit)
         const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
