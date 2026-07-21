@@ -87,7 +87,8 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Video not found' }, { status: 404 });
     }
 
-    if (record.ownerId && record.ownerId !== authUser.id) {
+    const reusablePublicTutorial = record.source === 'youtube' && record.processingStatus === 'complete';
+    if (record.ownerId && record.ownerId !== authUser.id && !reusablePublicTutorial) {
       return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
     }
 

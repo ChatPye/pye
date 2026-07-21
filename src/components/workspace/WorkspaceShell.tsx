@@ -1341,12 +1341,10 @@ export default function WorkspaceShell({
                           ...prev,
                           newMessage,
                         ])
-                        // Prefer streaming in dev; fallback to intelligent router
-                        if (process.env.NEXT_PUBLIC_USE_STREAM === 'true' || process.env.NODE_ENV !== 'production') {
-                          handleStreamChat(text)
-                        } else {
-                          handleIntelligentQuery(text)
-                        }
+                        // Every learner question uses the grounded Gemini tutor.
+                        // Tool routes remain available for explicit actions such
+                        // as search and clips, but must not replace chat in prod.
+                        handleStreamChat(text)
                       }}
                       onSearchTranscript={handleSearchTranscript}
                       onIntelligentQuery={handleIntelligentQuery}
@@ -1515,8 +1513,7 @@ export default function WorkspaceShell({
                           ...prev,
                           newMessage,
                         ])
-                        // Route to intelligent query handler
-                        handleIntelligentQuery(text)
+                        handleStreamChat(text)
                       }}
                       onSearchTranscript={handleSearchTranscript}
                       onIntelligentQuery={handleIntelligentQuery}
