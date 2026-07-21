@@ -12,6 +12,8 @@ import {
   consumePendingUpload,
   hasPendingUploadFlag,
 } from '@/lib/pending-upload-store';
+import { consumePendingYouTubeUrl, hasPendingYouTubeUrl } from '@/lib/pending-youtube-store';
+import { extractYouTubeVideoId } from '@/lib/youtube';
 
 function ResumeUploadHandler() {
   const router = useRouter();
@@ -101,10 +103,19 @@ function ResumeUploadHandler() {
 }
 
 function WorkspaceContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const source = searchParams.get('source');
   const videoIdParam = searchParams.get('videoId');
   const resumeUpload = searchParams.get('resumeUpload') === '1';
+  const resumeYoutube = searchParams.get('resumeYoutube') === '1';
+
+  useEffect(() => {
+    if (!resumeYoutube && !hasPendingYouTubeUrl()) return;
+    const url = consumePendingYouTubeUrl();
+    const videoId = url ? extractYouTubeVideoId(url) : null;
+    if (videoId) router.replace(`/workspace/${encodeURIComponent(videoId)}?source=youtube`);
+  }, [resumeYoutube, router]);
 
   if (videoIdParam) {
     const videoId = decodeURIComponent(videoIdParam);
@@ -123,6 +134,8 @@ function WorkspaceContent() {
       </>
     );
   }
+
+  if (resumeYoutube || hasPendingYouTubeUrl()) return null;
 
   return <WorkspaceShell source={source === 'upload' ? 'upload' : 'youtube'} />;
 }

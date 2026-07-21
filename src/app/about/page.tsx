@@ -42,6 +42,9 @@ export default function AboutPage() {
           <h1 className="text-4xl sm:text-5xl font-bold tracking-tight mb-6">
             About ChatPye
           </h1>
+          <p className="mb-4 text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">
+            Learning research company · SkillProof Studio is our first product
+          </p>
           <p className="text-xl text-zinc-400 max-w-3xl mx-auto">
             We're on a mission to redefine video-based upskilling for the future of work. ChatPye transforms every training or tutorial video into an AI-powered, interactive tutor—so learners no longer just watch, but engage, master, and prove their skills in real time.
           </p>
@@ -49,7 +52,7 @@ export default function AboutPage() {
 
         {/* Mission Section */}
         <div className="mb-16">
-          <h2 className="text-3xl font-semibold mb-8 text-center">Our Mission</h2>
+          <h2 className="text-3xl font-semibold mb-8 text-center">From research to workforce impact</h2>
           <div className="grid md:grid-cols-2 gap-8">
             <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-8">
               <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center mb-4">
@@ -57,7 +60,7 @@ export default function AboutPage() {
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
                 </svg>
               </div>
-              <h3 className="text-xl font-semibold mb-3">Interactive Learning</h3>
+              <h3 className="text-xl font-semibold mb-3">SkillProof Studio</h3>
               <p className="text-zinc-400">
                 We believe the future of work belongs to those who can learn fast, adapt fast, and prove what they know. ChatPye turns passive video watching into active upskilling experiences where learners ask questions, get instant answers, generate flashcards, and practise with AI-driven simulations—all inside the video itself.
               </p>
@@ -69,7 +72,7 @@ export default function AboutPage() {
                   <path d="M21 12c.552 0 1-.448 1-1V8a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v3c0 .552.448 1 1 1s1-.448 1-1V8h16v3c0 .552.448 1 1 1z"></path>
                 </svg>
               </div>
-              <h3 className="text-xl font-semibold mb-3">Proven Results</h3>
+              <h3 className="text-xl font-semibold mb-3">Responsible competency research</h3>
               <p className="text-zinc-400">
                 Video-based upskilling must go beyond course completion to measurable outcomes. Our AI tutors help learners retain knowledge longer, complete training faster, and demonstrate job-ready skills through personalised learning paths, real-time feedback, and open-source competency profiles. This bridges the gap between training and career opportunities in a fast-changing world of work.
               </p>

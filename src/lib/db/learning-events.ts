@@ -10,6 +10,13 @@ export type LearningEventType =
   | 'chat.message'
   | 'course.created'
   | 'course.assigned'
+  | 'course.invite_accepted'
+  | 'course.invite_declined'
+  | 'skillproof.step_completed'
+  | 'skillproof.evidence_submitted'
+  | 'skillproof.reflection_submitted'
+  | 'skillproof.snip_saved'
+  | 'skillproof.timestamp_clip_saved'
 
 export async function recordLearningEvent(input: {
   ownerClerkId: string

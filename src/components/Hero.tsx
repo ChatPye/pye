@@ -1,7 +1,7 @@
 'use client';
 
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from 'react';
-import { ArrowRight, ShieldCheck, UploadCloud } from 'lucide-react';
+import { ArrowRight, Link2, ShieldCheck, UploadCloud } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
@@ -12,6 +12,8 @@ import {
   setPendingUploadFlag,
 } from '@/lib/pending-upload-store';
 import { CLERK_SIGN_IN_URL, CLERK_SIGN_UP_URL } from '@/lib/clerk-env';
+import { extractYouTubeVideoId } from '@/lib/youtube';
+import { savePendingYouTubeUrl } from '@/lib/pending-youtube-store';
 
 export default function Hero() {
   const animatedRefs = useRef<(HTMLElement | null)[]>([]);
@@ -21,6 +23,7 @@ export default function Hero() {
   const router = useRouter();
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [youtubeUrl, setYoutubeUrl] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -59,7 +62,9 @@ export default function Hero() {
     event.preventDefault();
     if (isSubmitting) return;
 
-    if (!selectedFile) {
+    const youtubeVideoId = extractYouTubeVideoId(youtubeUrl);
+
+    if (!selectedFile && !youtubeVideoId) {
       setError('Upload a training video to start — MP4, WebM, or MOV.');
       return;
     }
@@ -70,6 +75,15 @@ export default function Hero() {
     }
 
     if (!isSignedIn) {
+      if (youtubeVideoId) {
+        if (!savePendingYouTubeUrl(youtubeUrl)) {
+          setError('Could not save that YouTube link. Please try again after signing in.');
+          return;
+        }
+        redirectToSignIn({ source: 'hero', query: { resumeYoutube: '1' } });
+        return;
+      }
+      if (!selectedFile) return;
       setError('Sign in to upload — your video will resume automatically after login.');
       try {
         await savePendingUpload(selectedFile);
@@ -89,6 +103,11 @@ export default function Hero() {
     setIsSubmitting(true);
 
     try {
+      if (youtubeVideoId) {
+        router.push(`/workspace/${encodeURIComponent(youtubeVideoId)}?source=youtube`);
+        return;
+      }
+      if (!selectedFile) return;
       const result = await uploadVideoFile(
         selectedFile,
         selectedFile.name.replace(/\.[^/.]+$/, '')
@@ -128,7 +147,7 @@ export default function Hero() {
               }}
             >
               <span className="inline-flex h-1.5 w-1.5 rounded-full bg-green-400" />
-              AI learning &amp; development for teams
+              Introducing SkillProof Studio · by ChatPye
             </div>
 
             <h1
@@ -142,7 +161,7 @@ export default function Hero() {
                 transition: '0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.05s',
               }}
             >
-              Upload training videos. Chat with AI. Prove competency.
+              Turn training videos into guided work and trusted skill evidence.
             </h1>
 
             <p
@@ -156,7 +175,10 @@ export default function Hero() {
                 transition: '0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.1s',
               }}
             >
+              <span className="hidden">
               Employees upskill from your videos with AI tutors. HR and managers see verified skills — or share a public competency profile to bring your company onboard.
+              </span>
+              SkillProof Studio is ChatPye&apos;s first workforce product: an AI learning workspace where employees and early-career talent learn from your tutorials, build real work, and give managers evidence they can review.
             </p>
 
             <div
@@ -172,7 +194,10 @@ export default function Hero() {
               }}
             >
               <ShieldCheck className="w-4 h-4 text-zinc-400" />
+              <span className="hidden">
               Custom video QA · No YouTube dependency · Shareable skill profiles
+              </span>
+              Public YouTube or private uploads · Timestamped tutor · Manager-reviewed evidence
             </div>
 
             <div
@@ -192,6 +217,17 @@ export default function Hero() {
                 onSubmit={handleSubmit}
                 className="flex flex-col gap-3 rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4 backdrop-blur"
               >
+                <div className="flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900/70 px-3 py-3">
+                  <Link2 className="h-4 w-4 shrink-0 text-zinc-400" />
+                  <input
+                    value={youtubeUrl}
+                    onChange={(event) => { setYoutubeUrl(event.target.value); setSelectedFile(null); setError(''); }}
+                    placeholder="Paste a public YouTube tutorial URL"
+                    className="w-full bg-transparent text-sm text-white placeholder:text-zinc-500 focus:outline-none"
+                    disabled={isSubmitting}
+                  />
+                </div>
+                <p className="text-left text-xs text-zinc-500">Start a SkillProof Studio workspace from a public YouTube tutorial, or upload your team&apos;s video.</p>
                 <button
                   type="button"
                   onClick={openFilePicker}
@@ -199,7 +235,7 @@ export default function Hero() {
                   disabled={isSubmitting}
                 >
                   <UploadCloud className="h-5 w-5" />
-                  {selectedFile ? selectedFile.name : 'Upload a training video (MP4, WebM, MOV)'}
+                  {selectedFile ? selectedFile.name : 'Or upload a training video (MP4, WebM, MOV)'}
                 </button>
 
                 <input
@@ -213,13 +249,13 @@ export default function Hero() {
                 <button
                   type="submit"
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-black transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={isSubmitting || !selectedFile || !isLoaded}
+                  disabled={isSubmitting || (!selectedFile && !youtubeUrl.trim()) || !isLoaded}
                 >
                   {isSubmitting
                     ? 'Uploading…'
                     : isLoaded && !isSignedIn
-                      ? 'Sign in to start learning'
-                      : 'Start learning'}
+                      ? 'Sign in to start SkillProof Studio'
+                      : extractYouTubeVideoId(youtubeUrl) ? 'Open SkillProof Studio' : 'Start SkillProof Studio'}
                   <ArrowRight className="h-4 w-4" />
                 </button>
 
