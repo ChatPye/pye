@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { findVideoByExternalId } from '@/lib/db/video-repository';
 import { generateSummary } from '@/lib/bedrock-summary';
+import { extractGeminiText } from '@/lib/video/transcript';
 
 type MaterialType = 'study-guide' | 'transcript' | 'summary';
 
@@ -45,6 +46,28 @@ function buildStudyGuide(
   return lines.join('\n');
 }
 
+async function generateTranscriptSummary(transcript: Array<{ text: string; start: number; duration: number }>): Promise<string> {
+  const apiKey = process.env.GEMINI_API_KEY
+  if (!apiKey) {
+    const generated = await generateSummary(transcript)
+    return generated.summary
+  }
+
+  const context = transcript.slice(0, 180).map((segment) => `[${formatTimestamp(segment.start)}] ${segment.text}`).join('\n')
+  const response = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+    body: JSON.stringify({
+      model: process.env.GEMINI_CHAT_MODEL || process.env.GEMINI_VIDEO_MODEL || 'gemini-3.6-flash',
+      input: [{ type: 'text', text: `Summarise this learning video in clear study notes. Use short headings and preserve useful [MM:SS] timestamps.\n\n${context}` }],
+    }),
+  })
+  if (!response.ok) throw new Error(`Gemini returned ${response.status}`)
+  const text = extractGeminiText(await response.json() as Record<string, unknown>).trim()
+  if (!text) throw new Error('Gemini returned an empty summary')
+  return text
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -64,7 +87,8 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Video not found' }, { status: 404 });
     }
 
-    if (record.ownerId && record.ownerId !== authUser.id) {
+    const reusablePublicTutorial = record.source === 'youtube' && record.processingStatus === 'complete';
+    if (record.ownerId && record.ownerId !== authUser.id && !reusablePublicTutorial) {
       return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
     }
 
@@ -82,10 +106,7 @@ export async function GET(
       content = buildTranscript(transcript);
     } else if (type === 'summary') {
       content = record.summary || '';
-      if (!content && transcript.length) {
-        const generated = await generateSummary(transcript);
-        content = generated.summary;
-      }
+      if (!content && transcript.length) content = await generateTranscriptSummary(transcript)
     } else {
       content = buildStudyGuide(
         record.title || 'Video',

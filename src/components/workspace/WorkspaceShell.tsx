@@ -548,11 +548,6 @@ export default function WorkspaceShell({
 
     if (processingStatus === 'complete' && previousStatus !== 'complete') {
       addAssistantMessage('Great news! The video is processed and ready for questions. Ask me anything about it!')
-      fetch('/api/competencies/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoId }),
-      }).catch(() => null)
     }
 
     if (processingStatus === 'failed' && previousStatus !== 'failed') {
@@ -1346,12 +1341,10 @@ export default function WorkspaceShell({
                           ...prev,
                           newMessage,
                         ])
-                        // Prefer streaming in dev; fallback to intelligent router
-                        if (process.env.NEXT_PUBLIC_USE_STREAM === 'true' || process.env.NODE_ENV !== 'production') {
-                          handleStreamChat(text)
-                        } else {
-                          handleIntelligentQuery(text)
-                        }
+                        // Every learner question uses the grounded Gemini tutor.
+                        // Tool routes remain available for explicit actions such
+                        // as search and clips, but must not replace chat in prod.
+                        handleStreamChat(text)
                       }}
                       onSearchTranscript={handleSearchTranscript}
                       onIntelligentQuery={handleIntelligentQuery}
@@ -1520,8 +1513,7 @@ export default function WorkspaceShell({
                           ...prev,
                           newMessage,
                         ])
-                        // Route to intelligent query handler
-                        handleIntelligentQuery(text)
+                        handleStreamChat(text)
                       }}
                       onSearchTranscript={handleSearchTranscript}
                       onIntelligentQuery={handleIntelligentQuery}
@@ -1595,7 +1587,7 @@ function WorkspaceSidebar({
 }) {
   const joinedPodsMemo = useMemo(() => state.joinedPods.slice(0, 5), [state.joinedPods])
   const ownedPodsMemo = useMemo(() => state.ownedPods.slice(0, 5), [state.ownedPods])
-  const recentVideosMemo = useMemo(() => state.recentVideos.slice(0, 15), [state.recentVideos])
+  const recentVideosMemo = useMemo(() => state.recentVideos.slice(0, 8), [state.recentVideos])
   const widthClass = collapsed && !isMobile ? 'lg:w-20' : 'lg:w-80'
   const displayNameClass = collapsed && !isMobile ? 'hidden' : 'block'
 
@@ -1703,7 +1695,7 @@ function WorkspaceSidebar({
         )}
 
         <SidebarSectionHeader collapsed={collapsed} title="Recent video pages" />
-        <div className="space-y-2">
+        <div className="max-h-72 space-y-2 overflow-y-auto pr-1 [scrollbar-width:thin]">
           {recentVideosMemo.length === 0 ? (
             !collapsed && (
               <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-4 text-xs text-white/40">
@@ -1732,7 +1724,7 @@ function WorkspaceSidebar({
               </Link>
             ))
           )}
-          {!collapsed && state.recentVideos.length > 15 && (
+          {!collapsed && state.recentVideos.length > 8 && (
             <div className="mt-2">
               <Link href="/workspace" className="text-[11px] text-blue-400 hover:text-blue-300 px-2">See all</Link>
             </div>
@@ -2828,7 +2820,7 @@ function ChatSidebar({
           </div>
         )}
       </div>
-      <SkillProofTaskPanel videoId={videoId} />
+      <SkillProofTaskPanel videoId={videoId} processingStatus={processingStatus} />
     </aside>
   )
 }

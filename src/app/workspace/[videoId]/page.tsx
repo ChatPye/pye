@@ -98,6 +98,7 @@ function WorkspaceVideoPage() {
   );
 
   const lastKickRef = useRef(0);
+  const lastTickRef = useRef(0);
 
   const queueServerProcessing = useCallback(async () => {
     if (!rawVideoId) return;
@@ -175,6 +176,26 @@ function WorkspaceVideoPage() {
         }
 
         setIsProcessing(true);
+        // Hobby deployments do not run a frequent cron. The open workspace is
+        // therefore the reliable, authenticated processing driver.
+        const tickNow = Date.now();
+        if (tickNow - lastTickRef.current > 8_000) {
+          lastTickRef.current = tickNow;
+          void fetch('/api/video/process/tick', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ videoId: rawVideoId, source: resolvedSource }),
+          }).then(async (tickResponse) => {
+            const tick = await tickResponse.json().catch(() => null);
+            if (!tickResponse.ok) {
+              console.warn('Video processing tick failed', tick?.error || tickResponse.status);
+              return;
+            }
+            if (typeof tick?.progress === 'number') setProcessingProgress(tick.progress);
+            if (tick?.video) setVideoRecord(tick.video);
+          }).catch((tickError) => console.warn('Video processing tick unavailable', tickError));
+        }
         // Re-kick server worker if stuck at pending/queued (every 60s)
         const stuck = status === 'pending' || status === 'queued';
         const now = Date.now();

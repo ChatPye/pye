@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { requireAurora } from '@/lib/db/require-aurora';
 import {
   createPod,
   listPodsForUser,
@@ -14,7 +13,6 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    requireAurora('Pods');
     const pods = await listPodsForUser(userId);
     return NextResponse.json({ success: true, pods } as PodResponse);
   } catch (error) {
@@ -30,8 +28,6 @@ export async function POST(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    requireAurora('Pods');
 
     const body = (await request.json()) as CreatePodRequest & {
       videos?: string[];

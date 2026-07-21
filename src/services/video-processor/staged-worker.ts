@@ -134,7 +134,9 @@ export async function advanceVideoProcessing(
   }
 
   if (!force) {
-    const lockMeta = { ...meta, tickLockUntil: Date.now() + 45_000 };
+    // Workspace polling advances one bounded stage at a time. Keep this short so
+    // a learner sees progress without allowing concurrent requests to overlap.
+    const lockMeta = { ...meta, tickLockUntil: Date.now() + 8_000 };
     await saveMeta(videoId, record, lockMeta);
   }
 
@@ -314,7 +316,27 @@ async function finishEmbeddingsAndSummary(
   if (meta.phase !== 'summarize') {
     if (offset < segments.length) {
       const batch = segments.slice(offset, offset + EMBED_BATCH);
-      const batchEmbeddings = await generateEmbeddings(batch);
+      // Embeddings improve semantic search, but they must never block a learner
+      // from using chat, notes or a SkillProof plan. The launch experience uses
+      // transcript keyword retrieval and Gemini; Bedrock embeddings are optional.
+      let batchEmbeddings: Array<{ text: string; start: number; duration: number; embedding: number[] }> = [];
+      try {
+        batchEmbeddings = await generateEmbeddings(batch);
+      } catch (error) {
+        logger.warn('Embedding provider unavailable; continuing without vectors', {
+          videoId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        await persistVideoRecord({
+          ...record,
+          videoId,
+          embeddings: record.embeddings ?? [],
+          processingStatus: 'embedding',
+          transcriptRef: serializeMeta({ ...meta, embeddingOffset: segments.length, phase: 'summarize' }),
+        });
+        record = (await findVideoByExternalId(videoId))!;
+        return finishEmbeddingsAndSummary(videoId, record);
+      }
       const existing = record.embeddings ?? [];
       const merged = [...existing, ...batchEmbeddings];
       const nextOffset = offset + batch.length;

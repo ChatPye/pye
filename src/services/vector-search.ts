@@ -78,7 +78,10 @@ export class VectorSearchService {
 
       fallbackTranscript = video.transcript || []
 
-      if (!bedrockClient || !video.embeddings || video.embeddings.length === 0) {
+      // Keep search available during provider throttling. Semantic retrieval is
+      // opt-in; the transcript keyword index is fast and sufficient for the
+      // interactive tutor's grounded answers.
+      if (process.env.CHAT_RETRIEVAL_PROVIDER !== 'bedrock' || !bedrockClient || !video.embeddings || video.embeddings.length === 0) {
         return this.keywordSearch(fallbackTranscript, query, limit)
       }
 

@@ -25,8 +25,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, competencies });
   } catch (error) {
     console.error('Competency analyze error:', error);
+    const message = error instanceof Error ? error.message : 'Analysis failed';
+    const throttled = /ThrottlingException|too many tokens|rate.?limit/i.test(message);
+    if (throttled) {
+      // Competency assertions must never make learning unavailable. The manager
+      // still receives the learner's submitted evidence; AI review can resume
+      // when the configured model capacity is available.
+      return NextResponse.json(
+        {
+          success: true,
+          competencies: [],
+          analysisStatus: 'deferred',
+          message: 'AI competency review is temporarily at capacity. Learning evidence has been saved for later review.',
+        },
+        { status: 202 }
+      );
+    }
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Analysis failed' },
+      { success: false, error: message },
       { status: 500 }
     );
   }

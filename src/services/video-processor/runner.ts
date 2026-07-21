@@ -32,6 +32,7 @@ export async function runVideoProcessingLoop(
       logger.info('Video processing finished', {
         videoId: payload.videoId,
         status: last.status,
+        error: last.error,
       });
       return last;
     }

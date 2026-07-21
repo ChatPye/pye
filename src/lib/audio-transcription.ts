@@ -259,7 +259,8 @@ export class AudioTranscriptionService {
       await this.transcribeClient.send(command);
     } catch (error) {
       console.error('Transcription job start error:', error);
-      throw new Error('Failed to start transcription job');
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`Unable to start AWS Transcribe: ${detail}`);
     }
   }
 

@@ -2,6 +2,18 @@ import { and, eq, inArray, or } from 'drizzle-orm';
 import { getDb, isDatabaseConfigured, schema } from '@/lib/db';
 import type { Pod } from '@/lib/types/pod';
 
+declare global {
+  // A deliberately small pilot fallback. Durable Pod collaboration uses Aurora
+  // once DATABASE_URL is configured; this keeps the product demo functional.
+  // eslint-disable-next-line no-var
+  var __CHATPYE_PODS__: Map<string, Pod> | undefined;
+}
+
+function memoryPods(): Map<string, Pod> {
+  if (!global.__CHATPYE_PODS__) global.__CHATPYE_PODS__ = new Map<string, Pod>();
+  return global.__CHATPYE_PODS__;
+}
+
 function rowToPod(
   row: typeof schema.pods.$inferSelect,
   memberIds: string[]
@@ -47,7 +59,9 @@ async function getPodUuid(externalId: string): Promise<string | null> {
 }
 
 export async function listPodsForUser(clerkUserId: string): Promise<Pod[]> {
-  if (!isDatabaseConfigured()) return [];
+  if (!isDatabaseConfigured()) {
+    return [...memoryPods().values()].filter((pod) => pod.ownerId === clerkUserId || pod.memberIds.includes(clerkUserId));
+  }
   const db = getDb();
 
   const memberPodIds = await db
@@ -77,7 +91,7 @@ export async function listPodsForUser(clerkUserId: string): Promise<Pod[]> {
 }
 
 export async function findPodByExternalId(externalId: string): Promise<Pod | null> {
-  if (!isDatabaseConfigured()) return null;
+  if (!isDatabaseConfigured()) return memoryPods().get(externalId) ?? null;
   const db = getDb();
   const [row] = await db
     .select()
@@ -91,6 +105,12 @@ export async function findPodByExternalId(externalId: string): Promise<Pod | nul
 export async function createPod(
   pod: Omit<Pod, 'createdAt' | 'updatedAt'> & { createdAt?: Date; updatedAt?: Date }
 ): Promise<Pod> {
+  if (!isDatabaseConfigured()) {
+    const now = new Date();
+    const created: Pod = { ...pod, memberIds: pod.memberIds.length ? pod.memberIds : [pod.ownerId], createdAt: now, updatedAt: now };
+    memoryPods().set(created.id, created);
+    return created;
+  }
   const db = getDb();
   const now = new Date();
   const [inserted] = await db
@@ -126,6 +146,13 @@ export async function createPod(
 }
 
 export async function updatePod(externalId: string, updates: Partial<Pod>): Promise<Pod | null> {
+  if (!isDatabaseConfigured()) {
+    const current = memoryPods().get(externalId);
+    if (!current) return null;
+    const updated = { ...current, ...updates, id: current.id, ownerId: current.ownerId, memberIds: updates.memberIds ?? current.memberIds, updatedAt: new Date() };
+    memoryPods().set(externalId, updated);
+    return updated;
+  }
   const db = getDb();
   const podUuid = await getPodUuid(externalId);
   if (!podUuid) return null;
@@ -151,6 +178,7 @@ export async function updatePod(externalId: string, updates: Partial<Pod>): Prom
 }
 
 export async function deletePod(externalId: string): Promise<boolean> {
+  if (!isDatabaseConfigured()) return memoryPods().delete(externalId);
   const db = getDb();
   const deleted = await db
     .delete(schema.pods)
@@ -164,6 +192,14 @@ export async function addPodMember(
   clerkUserId: string,
   role: 'admin' | 'member' = 'member'
 ): Promise<boolean> {
+  if (!isDatabaseConfigured()) {
+    const current = memoryPods().get(externalId);
+    if (!current) return false;
+    if (!current.memberIds.includes(clerkUserId)) current.memberIds = [...current.memberIds, clerkUserId];
+    current.updatedAt = new Date();
+    memoryPods().set(externalId, current);
+    return true;
+  }
   const podUuid = await getPodUuid(externalId);
   if (!podUuid) return false;
   const db = getDb();
@@ -186,6 +222,7 @@ export async function addPodMember(
 }
 
 export async function isPodMember(externalId: string, clerkUserId: string): Promise<boolean> {
+  if (!isDatabaseConfigured()) return memoryPods().get(externalId)?.memberIds.includes(clerkUserId) ?? false;
   const podUuid = await getPodUuid(externalId);
   if (!podUuid) return false;
   const db = getDb();

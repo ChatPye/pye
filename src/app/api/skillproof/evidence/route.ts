@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json() as Record<string, unknown>
     const videoId = typeof body.videoId === 'string' ? body.videoId.trim() : ''
     const action = typeof body.action === 'string' ? body.action as LearningEventType : null
-    const workspace = body.workspace === 'excel' ? 'excel' : body.workspace === 'vscode' ? 'vscode' : null
+    const workspace = body.workspace === 'excel' ? 'excel' : body.workspace === 'vscode' ? 'vscode' : body.workspace === 'general' ? 'general' : null
 
     if (!videoId || !workspace || !action || !allowedActions.includes(action)) {
       return NextResponse.json({ success: false, error: 'videoId, workspace and a valid action are required' }, { status: 400 })
@@ -22,6 +22,8 @@ export async function POST(request: NextRequest) {
 
     const payload: Record<string, unknown> = { workspace }
     if (typeof body.stepIndex === 'number') payload.stepIndex = body.stepIndex
+    if (typeof body.stepTitle === 'string') payload.stepTitle = body.stepTitle.slice(0, 200)
+    if (typeof body.expectedEvidence === 'string') payload.expectedEvidence = body.expectedEvidence.slice(0, 500)
     if (typeof body.evidenceUrl === 'string') payload.evidenceUrl = body.evidenceUrl.slice(0, 2000)
     if (typeof body.reflection === 'string') payload.reflection = body.reflection.slice(0, 2000)
 

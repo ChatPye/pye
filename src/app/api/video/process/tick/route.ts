@@ -24,8 +24,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Video not found' }, { status: 404 });
     }
 
-    if (record.ownerId && record.ownerId !== authUser.id) {
+    const reusableCompletedYouTube = record.source === 'youtube' && record.processingStatus === 'complete';
+    if (record.ownerId && record.ownerId !== authUser.id && !reusableCompletedYouTube) {
       return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
+    }
+
+    if (reusableCompletedYouTube) {
+      return NextResponse.json({
+        success: true,
+        status: 'complete',
+        progress: 100,
+        video: sanitizeVideoForClient(record),
+      });
     }
 
     const resolvedSource =
