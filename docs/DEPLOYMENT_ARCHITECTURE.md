@@ -42,6 +42,16 @@ Use least-privilege roles. The web app should only access its upload prefix, the
 5. Merge only after public YouTube processing, chat and course-sharing work in preview.
 6. Promote through Vercel to production.
 
+## Vercel Hobby preview behaviour
+
+The web pilot does not require a frequent Vercel Cron job. New videos start
+processing from the learner's workspace, and the workspace advances the
+processing stages through the authenticated processing endpoints while it is
+open. The former two-minute cron was only a recovery mechanism and is omitted
+from `vercel.json` so preview deployments work on a Hobby account. Add a
+queue/worker and an appropriately provisioned scheduler when long-running
+uploaded-video workloads move to AWS.
+
 ## CockroachDB adoption plan
 
 Do not swap the live database connection abruptly. Create a CockroachDB staging cluster, provide its PostgreSQL-compatible connection string as `DATABASE_URL`, generate/review a Drizzle migration, run the assignment/evidence flow and then schedule production migration with rollback and backup. CockroachDB should own durable business data; S3 remains the media store.

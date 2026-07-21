@@ -2,11 +2,5 @@
   "framework": "nextjs",
   "buildCommand": "npm run build",
   "installCommand": "npm ci",
-  "regions": ["iad1"],
-  "crons": [
-    {
-      "path": "/api/cron/video-process",
-      "schedule": "*/2 * * * *"
-    }
-  ]
+  "regions": ["iad1"]
 }
