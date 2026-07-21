@@ -19,7 +19,7 @@ export default function SharedVideoRedirect() {
         if (data?.videoId) {
           setVideoId(data.videoId)
           setStatus('ready')
-          router.replace(`/workspace?videoId=${encodeURIComponent(data.videoId)}&shared=${encodeURIComponent(params.shareId)}`)
+          router.replace(`/workspace/${encodeURIComponent(data.videoId)}?shared=${encodeURIComponent(params.shareId)}`)
         } else {
           setStatus('notfound')
         }

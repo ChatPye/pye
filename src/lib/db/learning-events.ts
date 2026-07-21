@@ -17,6 +17,10 @@ export type LearningEventType =
   | 'skillproof.reflection_submitted'
   | 'skillproof.snip_saved'
   | 'skillproof.timestamp_clip_saved'
+  | 'skillproof.quiz_completed'
+  | 'skillproof.flashcards_reviewed'
+  | 'skillproof.repo_assessed'
+  | 'video.viewed'
 
 export async function recordLearningEvent(input: {
   ownerClerkId: string

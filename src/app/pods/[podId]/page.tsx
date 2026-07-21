@@ -105,7 +105,7 @@ export default function PodPlaylistPage() {
               <div className="flex items-center gap-2">
                 <button onClick={() => moveVideo(i, -1)} className="px-2 py-1 text-[12px] rounded-lg border border-white/10 hover:border-white/20">↑</button>
                 <button onClick={() => moveVideo(i, 1)} className="px-2 py-1 text-[12px] rounded-lg border border-white/10 hover:border-white/20">↓</button>
-                <Link href={`/workspace?videoId=${encodeURIComponent(v)}`} className="text-[12px] text-blue-400">Open</Link>
+                <Link href={`/workspace/${encodeURIComponent(v)}`} className="text-[12px] text-blue-400">Open</Link>
               </div>
             </div>
           ))}

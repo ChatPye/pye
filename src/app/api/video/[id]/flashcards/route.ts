@@ -3,7 +3,7 @@ import { requireAuth } from '@/lib/auth';
 import { findVideoByExternalId } from '@/lib/db/video-repository';
 import { requireAurora } from '@/lib/db/require-aurora';
 import { getDb, schema } from '@/lib/db';
-import { generateFlashcardsFromTranscript } from '@/lib/learning/flashcard-generator';
+import { generateGeminiFlashcards } from '@/lib/learning/gemini-study';
 import { eq, and } from 'drizzle-orm';
 
 export async function GET(
@@ -64,7 +64,7 @@ export async function POST(
     }
 
     const transcriptText = (record.transcript ?? []).map((s) => s.text).join(' ');
-    const cards = await generateFlashcardsFromTranscript(transcriptText, 10);
+    const cards = await generateGeminiFlashcards(transcriptText, 8);
 
     const db = getDb();
     await db.insert(schema.videoFlashcards).values({

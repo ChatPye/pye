@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb, isDatabaseConfigured, schema } from '@/lib/db';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, inArray } from 'drizzle-orm';
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     }
 
     const db = getDb();
-    const rows = await db
+    const ownedRows = await db
       .select({
         videoId: schema.videos.externalId,
         title: schema.videos.title,
@@ -30,6 +30,18 @@ export async function GET(request: NextRequest) {
       .orderBy(desc(schema.videos.updatedAt))
       .limit(limit);
 
+    const recentEvents = await db
+      .select({ payload: schema.learningEvents.payload, createdAt: schema.learningEvents.createdAt })
+      .from(schema.learningEvents)
+      .where(eq(schema.learningEvents.ownerClerkId, authUser.id))
+      .orderBy(desc(schema.learningEvents.createdAt))
+      .limit(100);
+    const viewedIds = [...new Set(recentEvents.map((event) => String((event.payload as Record<string, unknown>)?.externalVideoId ?? '')).filter(Boolean))];
+    const viewedRows = viewedIds.length ? await db
+      .select({ videoId: schema.videos.externalId, title: schema.videos.title, processingStatus: schema.videos.processingStatus, source: schema.videos.source, updatedAt: schema.videos.updatedAt, createdAt: schema.videos.createdAt })
+      .from(schema.videos)
+      .where(inArray(schema.videos.externalId, viewedIds.slice(0, limit))) : [];
+    const rows = [...ownedRows, ...viewedRows.filter((row) => !ownedRows.some((owned) => owned.videoId === row.videoId))].slice(0, limit);
     const videos = rows.map((row) => ({
       id: row.videoId,
       title: row.title,

@@ -3,6 +3,7 @@ import { getDb, isDatabaseConfigured, schema } from '@/lib/db';
 import { invokeBedrockText } from '@/lib/bedrock-invoke';
 import { findVideoByExternalId } from '@/lib/db/video-repository';
 import { findLatestChatSession } from '@/lib/db/chat-history-repository';
+import { extractGeminiText } from '@/lib/video/transcript';
 
 export type LearnerCompetency = {
   id: string;
@@ -168,7 +169,7 @@ Chat activity: ${chatSnippet || 'none'}
 
 Identify 2-4 competencies demonstrated. Be specific to the content.`;
 
-  const raw = await invokeBedrockText(prompt, 'amazon.nova-lite-v1:0', 1500);
+  const raw = await invokeCompetencyModel(prompt);
   const parsed = parseAnalyzerJson(raw);
   if (!parsed.length) return [];
 
@@ -188,6 +189,24 @@ Identify 2-4 competencies demonstrated. Be specific to the content.`;
     .where(eq(schema.userPublicProfiles.ownerClerkId, params.ownerClerkId));
 
   return issued;
+}
+
+/** Gemini is the default competency assessor. Bedrock remains an explicit fallback for existing AWS deployments. */
+async function invokeCompetencyModel(prompt: string): Promise<string> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (apiKey && process.env.COMPETENCY_PROVIDER !== 'bedrock') {
+    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+      body: JSON.stringify({
+        model: process.env.GEMINI_CHAT_MODEL || process.env.GEMINI_VIDEO_MODEL || 'gemini-3.6-flash',
+        input: [{ type: 'text', text: prompt }],
+      }),
+    });
+    if (!response.ok) throw new Error(`Gemini returned ${response.status}`);
+    return extractGeminiText(await response.json() as Record<string, unknown>);
+  }
+  return invokeBedrockText(prompt, 'amazon.nova-lite-v1:0', 1500);
 }
 
 function parseAnalyzerJson(raw: string): Array<{
