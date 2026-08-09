@@ -1,7 +1,9 @@
 # Implementation Status
 
 **Last updated:** 2026-08-09  
+**Canonical repo:** https://github.com/ChatPye/pye  
 **Master plan:** v1.2 — `docs/implementation/MASTER_PLAN.md`  
+**Platform handover:** `docs/operations/AWS_PLATFORM_HANDOVER.md`  
 **Current gate:** M1.7 complete → proceed to M1.8 (`/app/import` UI)
 
 ---

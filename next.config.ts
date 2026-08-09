@@ -15,6 +15,9 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
   webpack: (config) => {
+    config.resolve.extensionAlias = {
+      ".js": [".ts", ".tsx", ".js"],
+    };
     config.resolve.alias = {
       ...config.resolve.alias,
       plasmo: false,

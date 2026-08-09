@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useUser, useClerk } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
+import { isClerkPublishableKey } from '@/lib/clerk-env';
 import { ArrowRight, LogOut, Users, BarChart3, Settings, Shield, Crown, Mail, CreditCard, Trophy, TrendingUp, DollarSign, Calendar, Plus, Edit, Trash2, Save, RotateCcw, AlertTriangle, Eye, Ban, Unlock, Activity, Globe } from 'lucide-react';
 
 // Force dynamic rendering to avoid SSR issues with Clerk
@@ -1340,12 +1341,36 @@ function AdminDashboardContent() {
   );
 }
 
+function AdminStaffGate() {
+  const { user, isLoaded } = useUser();
+
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-zinc-400">Loading…</div>
+      </div>
+    );
+  }
+
+  const email = user?.emailAddresses?.[0]?.emailAddress?.toLowerCase() || '';
+  const staffEmails = ['job@chatpye.com', 'job.oyebisi@gmail.com'];
+  if (!staffEmails.includes(email)) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-center text-white">
+          <h1 className="text-2xl font-bold mb-2">Access restricted</h1>
+          <p className="text-zinc-400">This area is limited to ChatPye staff.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return <AdminDashboardContent />;
+}
+
 // Main component that handles Clerk availability
 export default function AdminDashboard() {
-  // Check if Clerk is available
-  const hasClerkKey = typeof window !== 'undefined' && process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-  
-  if (!hasClerkKey) {
+  if (!isClerkPublishableKey(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY)) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
@@ -1356,19 +1381,5 @@ export default function AdminDashboard() {
     );
   }
 
-  // Gate by allowlist or role
-  const { user } = useUser()
-  const email = user?.emailAddresses?.[0]?.emailAddress?.toLowerCase() || ''
-  const allow = email === 'job@chatpye.com'
-  if (!allow) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="text-center text-white">
-          <h1 className="text-2xl font-bold mb-2">Access restricted</h1>
-          <p className="text-zinc-400">This area is limited to ChatPye staff.</p>
-        </div>
-      </div>
-    )
-  }
-  return <AdminDashboardContent />;
+  return <AdminStaffGate />;
 }

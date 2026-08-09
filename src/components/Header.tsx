@@ -214,18 +214,18 @@ export default function Header() {
             <span className="text-sm font-medium">ChatPye</span>
           </Link>
           <div className="hidden items-center justify-center gap-8 md:flex">
-            <a href="/pyelab" className="text-sm text-zinc-400 hover:text-white transition-colors">
+            <Link href="/pyelab" className="text-sm text-zinc-400 hover:text-white transition-colors">
               Pye Lab
-            </a>
+            </Link>
             <a href="#pricing" className="text-sm text-zinc-400 hover:text-white transition-colors">
               Pricing
             </a>
             <a href="#features" className="text-sm text-zinc-400 hover:text-white transition-colors">
               Features
             </a>
-            <a href="/enterprise" className="text-sm text-zinc-400 hover:text-white transition-colors">
+            <Link href="/enterprise" className="text-sm text-zinc-400 hover:text-white transition-colors">
               Enterprise
-            </a>
+            </Link>
           </div>
           <div className="hidden items-center gap-3 md:flex">
             <Link href={CLERK_SIGN_IN_URL} className="text-sm text-zinc-300 hover:text-white transition-colors font-medium border border-blue-500/30 hover:border-blue-500/50 px-3 py-2 rounded-md bg-blue-500/5 hover:bg-blue-500/10">
@@ -259,18 +259,18 @@ export default function Header() {
             <span className="text-sm font-medium">ChatPye</span>
           </Link>
           <div className="hidden items-center justify-center gap-8 md:flex">
-            <a href="/pyelab" className="text-sm text-zinc-400 hover:text-white transition-colors">
+            <Link href="/pyelab" className="text-sm text-zinc-400 hover:text-white transition-colors">
               Pye Lab
-            </a>
+            </Link>
             <a href="#pricing" className="text-sm text-zinc-400 hover:text-white transition-colors">
               Pricing
             </a>
             <a href="#features" className="text-sm text-zinc-400 hover:text-white transition-colors">
               Features
             </a>
-            <a href="/enterprise" className="text-sm text-zinc-400 hover:text-white transition-colors">
+            <Link href="/enterprise" className="text-sm text-zinc-400 hover:text-white transition-colors">
               Enterprise
-            </a>
+            </Link>
           </div>
           <div className="hidden items-center gap-3 md:flex">
             <Link href={CLERK_SIGN_IN_URL} className="text-sm text-zinc-300 hover:text-white transition-colors font-medium border border-blue-500/30 hover:border-blue-500/50 px-3 py-2 rounded-md bg-blue-500/5 hover:bg-blue-500/10">
@@ -304,18 +304,18 @@ export default function Header() {
             <span className="text-sm font-medium">ChatPye</span>
           </Link>
           <div className="hidden items-center justify-center gap-8 md:flex">
-            <a href="/pyelab" className="text-sm text-zinc-400 hover:text-white transition-colors">
+            <Link href="/pyelab" className="text-sm text-zinc-400 hover:text-white transition-colors">
               Pye Lab
-            </a>
+            </Link>
             <a href="#pricing" className="text-sm text-zinc-400 hover:text-white transition-colors">
               Pricing
             </a>
             <a href="#features" className="text-sm text-zinc-400 hover:text-white transition-colors">
               Features
             </a>
-            <a href="/enterprise" className="text-sm text-zinc-400 hover:text-white transition-colors">
+            <Link href="/enterprise" className="text-sm text-zinc-400 hover:text-white transition-colors">
               Enterprise
-            </a>
+            </Link>
           </div>
           <div className="hidden items-center justify-end gap-3 md:flex">
             <Link href={CLERK_SIGN_IN_URL} className="text-sm text-zinc-300 hover:text-white transition-colors font-medium border border-blue-500/30 hover:border-blue-500/50 px-3 py-2 rounded-md bg-blue-500/5 hover:bg-blue-500/10">

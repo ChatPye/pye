@@ -13,7 +13,7 @@ import {
   updateVideoStatus,
   updateVideoTranscript,
   updateVideoProcessingResult,
-  useAuroraForVideos,
+  isAuroraConfiguredForVideos,
 } from '@/lib/db/video-repository'
 import { recordLearningEvent } from '@/lib/db/learning-events'
 import type { ProcessingStatus } from '@/data/models/VideoProcess'
@@ -90,7 +90,7 @@ export async function triggerVideoProcessing(payload: ProcessingJobPayload): Pro
   ) => {
     const updated = await updateVideoTranscript(videoId, segments)
     record = updated ?? { ...record!, transcript: segments }
-    if (!useAuroraForVideos()) {
+    if (!isAuroraConfiguredForVideos()) {
       upsertMemoryVideo({ ...(record || {}), videoId, transcript: segments })
     }
   }

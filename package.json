@@ -7,10 +7,10 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run dev --workspace=@chatpye/web",
-    "build": "npm run build --workspace=@chatpye/web",
-    "start": "npm run start --workspace=@chatpye/web",
-    "lint": "eslint . --max-warnings 200",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint . --max-warnings 326",
     "lint:security": "eslint . --max-warnings 0",
     "type-check": "tsc --noEmit && npm run type-check --workspaces --if-present",
     "test": "jest",

@@ -36,10 +36,11 @@ locals {
 }
 
 module "vpc" {
-  source      = "../../modules/vpc"
-  name_prefix = local.name_prefix
-  vpc_cidr    = "10.30.0.0/16"
-  tags        = local.default_tags
+  source            = "../../modules/vpc"
+  name_prefix       = local.name_prefix
+  vpc_cidr          = "10.30.0.0/16"
+  nat_gateway_count = 2
+  tags              = local.default_tags
 }
 
 module "kms" {
@@ -67,12 +68,16 @@ module "sqs" {
 }
 
 module "rds" {
-  source      = "../../modules/rds"
-  name_prefix = local.name_prefix
-  vpc_id      = module.vpc.vpc_id
-  subnet_ids  = module.vpc.private_subnet_ids
-  instance_class = "db.r6g.large"
-  tags        = local.default_tags
+  source                     = "../../modules/rds"
+  name_prefix                = local.name_prefix
+  vpc_id                     = module.vpc.vpc_id
+  subnet_ids                 = module.vpc.private_subnet_ids
+  instance_class             = "db.r6g.large"
+  allowed_security_group_ids = [module.ecs.service_security_group_id]
+  skip_final_snapshot        = false
+  final_snapshot_identifier  = "${local.name_prefix}-final"
+  deletion_protection        = true
+  tags                       = local.default_tags
 }
 
 module "elasticache" {
@@ -124,7 +129,7 @@ module "cloudwatch" {
 module "codepipeline" {
   source                  = "../../modules/codepipeline"
   name_prefix             = local.name_prefix
-  repository_name         = "ChatPye/chatpye-web"
+  repository_name         = "ChatPye/pye"
   branch                  = "main"
   codestar_connection_arn = var.codestar_connection_arn
   tags                    = local.default_tags

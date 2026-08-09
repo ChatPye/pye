@@ -38,10 +38,11 @@ locals {
 }
 
 module "vpc" {
-  source      = "../../modules/vpc"
-  name_prefix = local.name_prefix
-  vpc_cidr    = "10.20.0.0/16"
-  tags        = local.default_tags
+  source            = "../../modules/vpc"
+  name_prefix       = local.name_prefix
+  vpc_cidr          = "10.20.0.0/16"
+  nat_gateway_count = 1
+  tags              = local.default_tags
 }
 
 module "kms" {
@@ -68,22 +69,6 @@ module "sqs" {
   tags        = local.default_tags
 }
 
-module "rds" {
-  source      = "../../modules/rds"
-  name_prefix = local.name_prefix
-  vpc_id      = module.vpc.vpc_id
-  subnet_ids  = module.vpc.private_subnet_ids
-  tags        = local.default_tags
-}
-
-module "elasticache" {
-  source      = "../../modules/elasticache"
-  name_prefix = local.name_prefix
-  vpc_id      = module.vpc.vpc_id
-  subnet_ids  = module.vpc.private_subnet_ids
-  tags        = local.default_tags
-}
-
 module "ecs" {
   source             = "../../modules/ecs"
   name_prefix        = local.name_prefix
@@ -92,6 +77,18 @@ module "ecs" {
   scale_to_zero      = true
   desired_count      = 0
   tags               = local.default_tags
+}
+
+module "rds" {
+  source                     = "../../modules/rds"
+  name_prefix                = local.name_prefix
+  vpc_id                     = module.vpc.vpc_id
+  subnet_ids                 = module.vpc.private_subnet_ids
+  instance_class             = "db.t4g.micro"
+  allowed_security_group_ids = [module.ecs.service_security_group_id]
+  skip_final_snapshot        = false
+  final_snapshot_identifier  = "${local.name_prefix}-final"
+  tags                       = local.default_tags
 }
 
 module "secrets" {
@@ -110,7 +107,7 @@ module "cloudwatch" {
 module "codepipeline" {
   source                  = "../../modules/codepipeline"
   name_prefix             = local.name_prefix
-  repository_name         = "ChatPye/chatpye-web"
+  repository_name         = "ChatPye/pye"
   branch                  = "main"
   codestar_connection_arn = var.codestar_connection_arn
   tags                    = local.default_tags
@@ -118,12 +115,12 @@ module "codepipeline" {
 
 # Staging: no public ALB/WAF — internal access only
 module "alb" {
-  source             = "../../modules/alb"
-  name_prefix        = local.name_prefix
-  vpc_id             = module.vpc.vpc_id
-  public_subnet_ids  = module.vpc.public_subnet_ids
-  enable_public      = false
-  tags               = local.default_tags
+  source            = "../../modules/alb"
+  name_prefix       = local.name_prefix
+  vpc_id            = module.vpc.vpc_id
+  public_subnet_ids = module.vpc.public_subnet_ids
+  enable_public     = false
+  tags              = local.default_tags
 }
 
 output "rds_endpoint" { value = module.rds.endpoint }

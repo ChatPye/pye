@@ -2,6 +2,7 @@ variable "name_prefix" { type = string }
 variable "repository_name" { type = string }
 variable "branch" { type = string, default = "main" }
 variable "codestar_connection_arn" { type = string }
+variable "compute_type" { type = string, default = "BUILD_GENERAL1_SMALL" }
 variable "tags" { type = map(string) }
 
 resource "aws_codebuild_project" "build" {
@@ -9,7 +10,7 @@ resource "aws_codebuild_project" "build" {
   service_role = aws_iam_role.codebuild.arn
   artifacts { type = "CODEPIPELINE" }
   environment {
-    compute_type                = "BUILD_GENERAL1_MEDIUM"
+    compute_type                = var.compute_type
     image                       = "aws/codebuild/standard:7.0"
     type                        = "LINUX_CONTAINER"
     image_pull_credentials_type = "CODEBUILD"

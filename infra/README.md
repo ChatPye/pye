@@ -1,6 +1,7 @@
 # ChatPye Infrastructure (OpenTofu / Terraform)
 
 **Primary region:** `eu-west-2` (AWS London)  
+**Canonical repository:** https://github.com/ChatPye/pye  
 **IaC tool:** OpenTofu or Terraform >= 1.6
 
 ## Operator approval required

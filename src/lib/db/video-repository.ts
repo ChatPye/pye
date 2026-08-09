@@ -17,12 +17,15 @@ import {
 } from '@/lib/db/video-types'
 import { logger } from '@/lib/logger'
 
-export function useAuroraForVideos(): boolean {
+export function isAuroraConfiguredForVideos(): boolean {
   return isDatabaseConfigured() && process.env.DEV_FORCE_IN_MEMORY !== 'true'
 }
 
-async function useMongoForVideos(): Promise<boolean> {
-  if (useAuroraForVideos()) return false
+/** @deprecated Use isAuroraConfiguredForVideos */
+export const useAuroraForVideos = isAuroraConfiguredForVideos
+
+async function shouldUseMongoVideoStore(): Promise<boolean> {
+  if (isAuroraConfiguredForVideos()) return false
   if (process.env.DEV_FORCE_IN_MEMORY === 'true') return false
   const db = await connectDocumentDB()
   return Boolean(db)
@@ -31,7 +34,7 @@ async function useMongoForVideos(): Promise<boolean> {
 export async function findVideoByExternalId(
   videoId: string
 ): Promise<VideoRecord | null> {
-  if (useAuroraForVideos()) {
+  if (isAuroraConfiguredForVideos()) {
     try {
       const db = getDb()
       const [row] = await db
@@ -49,7 +52,7 @@ export async function findVideoByExternalId(
     }
   }
 
-  if (await useMongoForVideos()) {
+  if (await shouldUseMongoVideoStore()) {
     const doc = await VideoProcess.findOne({ videoId }).lean()
     if (doc) return doc as unknown as VideoRecord
   }
@@ -65,7 +68,7 @@ export async function persistVideoRecord(
     throw new Error('videoId is required')
   }
 
-  if (useAuroraForVideos()) {
+  if (isAuroraConfiguredForVideos()) {
     const db = getDb()
     const existing = await findVideoByExternalId(record.videoId)
     const payload = videoRecordToInsert({ ...existing, ...record, videoId: record.videoId })
@@ -82,7 +85,7 @@ export async function persistVideoRecord(
     return (await findVideoByExternalId(record.videoId)) as VideoRecord
   }
 
-  if (await useMongoForVideos()) {
+  if (await shouldUseMongoVideoStore()) {
     const existing = await VideoProcess.findOne({ videoId: record.videoId })
     if (existing) {
       Object.assign(existing, record)
@@ -140,7 +143,7 @@ export async function updateVideoProcessingResult(
     processingStatus: result.processingStatus ?? 'complete',
   })
 
-  if (useAuroraForVideos() && result.embeddings?.length) {
+  if (isAuroraConfiguredForVideos() && result.embeddings?.length) {
     try {
       const db = getDb()
       const [videoRow] = await db
@@ -193,7 +196,7 @@ export async function countVideosByOwnerSince(
   ownerClerkId: string,
   since: Date
 ): Promise<number> {
-  if (useAuroraForVideos()) {
+  if (isAuroraConfiguredForVideos()) {
     try {
       const db = getDb()
       const [result] = await db
@@ -212,7 +215,7 @@ export async function countVideosByOwnerSince(
     }
   }
 
-  if (await useMongoForVideos()) {
+  if (await shouldUseMongoVideoStore()) {
     return VideoProcess.countDocuments({
       ownerId: ownerClerkId,
       createdAt: { $gte: since },
@@ -237,7 +240,7 @@ const ACTIVE_PROCESSING_STATUSES = [
 
 /** Videos awaiting backend worker (for Vercel cron / recovery). */
 export async function listVideosPendingProcessing(limit = 10): Promise<VideoRecord[]> {
-  if (useAuroraForVideos()) {
+  if (isAuroraConfiguredForVideos()) {
     try {
       const db = getDb()
       const rows = await db
@@ -258,7 +261,7 @@ export async function listVideosPendingProcessing(limit = 10): Promise<VideoReco
     }
   }
 
-  if (await useMongoForVideos()) {
+  if (await shouldUseMongoVideoStore()) {
     const docs = await VideoProcess.find({
       processingStatus: { $in: [...ACTIVE_PROCESSING_STATUSES] },
     })

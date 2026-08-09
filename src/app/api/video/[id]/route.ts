@@ -3,7 +3,7 @@ import { requireAuth } from '@/lib/auth'
 import {
   findVideoByExternalId,
   incrementVideoAccess,
-  useAuroraForVideos,
+  isAuroraConfiguredForVideos,
 } from '@/lib/db/video-repository'
 import { getMemoryVideo } from '@/data/stores/videoMemoryStore'
 import type { VideoProcessDocument } from '@/data/models/VideoProcess'
@@ -31,7 +31,7 @@ export async function GET(
 
     const useMemory =
       process.env.DEV_FORCE_IN_MEMORY === 'true' &&
-      !useAuroraForVideos()
+      !isAuroraConfiguredForVideos()
 
     if (useMemory) {
       const memoryVideo = getMemoryVideo(id)
