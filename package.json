@@ -1,31 +1,29 @@
 {
-  "name": "chatpye-web",
+  "name": "chatpye",
   "version": "1.0.0",
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "npm run dev --workspace=@chatpye/web",
+    "build": "npm run build --workspace=@chatpye/web",
+    "start": "npm run start --workspace=@chatpye/web",
     "lint": "eslint . --max-warnings 200",
     "lint:security": "eslint . --max-warnings 0",
-    "type-check": "tsc --noEmit",
+    "type-check": "tsc --noEmit && npm run type-check --workspaces --if-present",
     "test": "jest",
-    "test:unit": "jest --testPathPattern=unit --passWithNoTests",
+    "test:unit": "jest src/__tests__ --passWithNoTests && npm run test --workspaces --if-present",
     "test:integration": "jest --testPathPattern=integration --passWithNoTests",
     "test:watch": "jest --watch",
-    "test:performance:api": "echo 'API performance tests not implemented yet' && exit 0",
-    "test:performance:cache": "echo 'Cache performance tests not implemented yet' && exit 0",
-    "test:performance:database": "echo 'Database performance tests not implemented yet' && exit 0",
-    "deploy:staging": "npm run build && npm run start",
-    "deploy:production": "npm run build && npm run start",
-    "secrets:encrypt": "node scripts/secrets/encrypt-env.cjs",
-    "secrets:decrypt": "node scripts/secrets/decrypt-env.cjs",
-    "db:generate": "drizzle-kit generate",
-    "db:push": "drizzle-kit push",
-    "db:migrate": "node scripts/db/migrate.mjs",
-    "db:studio": "drizzle-kit studio",
-    "logs:analyze": "node scripts/cloudwatch-analyze.mjs",
-    "lambda:deploy-preprocess": "node scripts/deploy/deploy-video-preprocess-lambda.mjs"
+    "db:generate": "npm run db:generate --workspace=@chatpye/database",
+    "db:push": "npm run db:push --workspace=@chatpye/database",
+    "db:migrate": "npm run db:migrate --workspace=@chatpye/database",
+    "db:studio": "npm run db:studio --workspace=@chatpye/database",
+    "infra:fmt": "terraform -chdir=infra/environments/staging fmt -recursive && terraform -chdir=infra/environments/production fmt -recursive",
+    "infra:validate:staging": "terraform -chdir=infra/environments/staging init -backend=false && terraform -chdir=infra/environments/staging validate",
+    "infra:validate:production": "terraform -chdir=infra/environments/production init -backend=false && terraform -chdir=infra/environments/production validate"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.0.0",
@@ -40,6 +38,10 @@
     "@aws-sdk/client-textract": "^3.893.0",
     "@aws-sdk/client-transcribe": "^3.0.0",
     "@aws-sdk/s3-request-presigner": "^3.1075.0",
+    "@chatpye/ai-core": "*",
+    "@chatpye/ai-providers": "*",
+    "@chatpye/database": "*",
+    "@chatpye/domain": "*",
     "@clerk/nextjs": "^5.0.0",
     "@danielxceron/youtube-transcript": "^1.2.3",
     "@stripe/stripe-js": "^7.9.0",
@@ -64,7 +66,8 @@
     "refractor": "^4.9.0",
     "stripe": "^14.0.0",
     "tesseract.js": "^5.0.0",
-    "ytdl-core": "^4.11.5"
+    "ytdl-core": "^4.11.5",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
@@ -95,17 +98,6 @@
     "type": "git",
     "url": "https://github.com/ChatPye/chatpye-web.git"
   },
-  "keywords": [
-    "ai",
-    "youtube",
-    "learning",
-    "education",
-    "chatgpt",
-    "claude",
-    "notes",
-    "bookmarks"
-  ],
   "author": "ChatPye Team",
-  "license": "MIT",
-  "homepage": "https://chatpye.com"
+  "license": "UNLICENSED"
 }

@@ -97,6 +97,8 @@ export const videos = pgTable("videos", {
   lastAccessed: timestamp("last_accessed"),
   processedAt: timestamp("processed_at"),
   publishedLabel: varchar("published_label", { length: 100 }),
+  /** Links to canonical `resources` row during M1 migration. */
+  resourceId: uuid("resource_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -412,3 +414,16 @@ export const learnerCompetencies = pgTable("learner_competencies", {
   sourceVideoId: varchar("source_video_id", { length: 255 }),
   issuedAt: timestamp("issued_at").defaultNow().notNull(),
 });
+
+export {
+  aiJobs,
+  auditEvents,
+  dataRetentionPolicies,
+  aiJobStatusEnum,
+  auditEventTypeEnum,
+  resources,
+  resourceProcessingJobs,
+  resourceSourceTypeEnum,
+  resourceProcessingStateEnum,
+  resourceVisibilityEnum,
+} from '@chatpye/database';

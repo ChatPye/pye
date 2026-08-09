@@ -27,7 +27,13 @@
       "@/*": [
         "./src/*"
       ],
-      "@/components/*": ["src/components/*"]
+      "@/components/*": ["src/components/*"],
+      "@chatpye/ai-core": ["./packages/ai-core/src/index.ts"],
+      "@chatpye/ai-providers": ["./packages/ai-providers/src/index.ts"],
+      "@chatpye/database": ["./packages/database/src/index.ts"],
+      "@chatpye/domain": ["./packages/domain/src/index.ts"],
+      "@chatpye/config": ["./packages/config/src/index.ts"],
+      "@chatpye/observability": ["./packages/observability/src/index.ts"]
     }
   },
   "include": [
@@ -40,6 +46,8 @@
   "exclude": [
     "node_modules",
     "chatpye-extension",
-    "chatpye-extension-v3"
+    "chatpye-extension-v3",
+    "packages/**",
+    "apps/**"
   ]
 }

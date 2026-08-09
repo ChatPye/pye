@@ -1,0 +1,21 @@
+version: 0.2
+phases:
+  install:
+    runtime-versions:
+      nodejs: 20
+    commands:
+      - npm ci
+  pre_build:
+    commands:
+      - npm run type-check
+      - npm run test:unit
+      - npm run infra:validate:staging
+  build:
+    commands:
+      - npm run build
+      - docker build -f apps/web/Dockerfile -t $ECR_WEB_REPO:$CODEBUILD_RESOLVED_SOURCE_VERSION .
+      - docker build -f apps/api/Dockerfile -t $ECR_API_REPO:$CODEBUILD_RESOLVED_SOURCE_VERSION .
+      - docker build -f apps/worker/Dockerfile -t $ECR_WORKER_REPO:$CODEBUILD_RESOLVED_SOURCE_VERSION .
+  post_build:
+    commands:
+      - echo "Push images and deploy to ECS via workload roles (configured in pipeline deploy stage)"

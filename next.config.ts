@@ -6,6 +6,11 @@ const isEcs = process.env.DEPLOY_TARGET === "ecs";
 const nextConfig: NextConfig = {
   // Vercel uses default output; standalone is for ECS/Docker only
   ...(isEcs && !isVercel ? { output: "standalone" as const } : {}),
+  async redirects() {
+    return [
+      { source: '/app/competencies', destination: '/app/growth-record', permanent: false },
+    ];
+  },
   eslint: {
     ignoreDuringBuilds: true,
   },

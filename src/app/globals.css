@@ -3,8 +3,18 @@
 @tailwind utilities;
 
 :root {
-  --background: #000000;
-  --foreground: #ffffff;
+  --background: #0a0c10;
+  --foreground: #f0f2f5;
+  /* ChatPye Midnight Studio tokens — see docs/design/DESIGN_SYSTEM.md */
+  --color-background: #0a0c10;
+  --color-background-elevated: #111418;
+  --color-surface: #1c2128;
+  --color-border: #30363d;
+  --color-text-primary: #f0f2f5;
+  --color-text-secondary: #9ca3af;
+  --color-accent-ai: #8b5cf6;
+  --color-accent-interactive: #3b82f6;
+  --color-accent-progress: #10b981;
 }
 
 body {

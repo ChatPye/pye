@@ -2,17 +2,20 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { getClientIP, checkDDoSProtection, validateRequestSize, getCORSHeaders, SECURITY_CONFIG } from '@/lib/security';
+import { assertProductionSafety } from '@/lib/api/errors';
 
 // Define protected routes
 const isProtectedRoute = createRouteMatcher([
   '/dashboard(.*)',
   '/workspace(.*)',
+  '/app(.*)',
   '/admin(.*)',
   '/api/user(.*)',
   '/api/admin(.*)'
 ]);
 
 export default clerkMiddleware(async (auth, request) => {
+  assertProductionSafety();
   const { pathname } = request.nextUrl;
   const headers = request.headers;
   const clientIP = getClientIP(request, headers);
@@ -45,6 +48,11 @@ export default clerkMiddleware(async (auth, request) => {
     // If user is on the landing page, redirect to default workspace
     if (pathname === '/') {
       console.log('🔄 Redirecting authenticated user from / to /workspace');
+      return NextResponse.redirect(new URL('/workspace', request.url));
+    }
+
+    // Canonical app entry redirects to workspace during migration
+    if (pathname === '/app' || pathname === '/app/import') {
       return NextResponse.redirect(new URL('/workspace', request.url));
     }
     
@@ -216,6 +224,7 @@ export const config = {
     '/return',
     '/dashboard/:path*',
     '/workspace/:path*',
+    '/app/:path*',
     '/admin/:path*'
   ]
 };

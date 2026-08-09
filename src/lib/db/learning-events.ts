@@ -4,6 +4,7 @@ import { logger } from '@/lib/logger'
 
 export type LearningEventType =
   | 'video.uploaded'
+  | 'resource.import'
   | 'video.processing_started'
   | 'video.processing_complete'
   | 'video.processing_failed'

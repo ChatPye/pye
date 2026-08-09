@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "dist",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "paths": {
+      "@chatpye/config": ["../../packages/config/src/index.ts"],
+      "@chatpye/observability": ["../../packages/observability/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}

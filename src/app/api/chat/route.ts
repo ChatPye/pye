@@ -15,6 +15,11 @@ import { DEMO_VIDEO_ID, DEMO_CACHED_RESPONSES, DEMO_TRANSCRIPT } from '@/data/de
 import { extractCodeFromTranscript, combineCodeSources } from '@/lib/code-extraction';
 import { ocrService } from '@/lib/ocr-service';
 import { extractGeminiText } from '@/lib/video/transcript';
+import { askPyeYoutube } from '@/lib/ai/router';
+import {
+  resolveChatProvider,
+  resolveYouTubeWatchUrl,
+} from '@/lib/ai/resolve-chat-provider';
 
 // Force dynamic rendering for API routes
 export const dynamic = 'force-dynamic';
@@ -423,13 +428,91 @@ export async function POST(request: NextRequest) {
       return streamResponse(mockResponse);
     }
 
+    const videoRecord = videoId ? await findVideoByExternalId(videoId) : null;
+    const chatStrategy = resolveChatProvider({ videoId, videoRecord });
+
+    // YouTube resources: Gemini multimodal chat via public watch URL (no transcript required).
+    if (chatStrategy === 'gemini-youtube') {
+      const youtubeUrl = resolveYouTubeWatchUrl({ videoId, videoRecord });
+      if (!youtubeUrl) {
+        return NextResponse.json({ error: 'Invalid YouTube resource' }, { status: 400 });
+      }
+
+      let transcriptContext = '';
+      const segments =
+        transcript ||
+        (videoId === DEMO_VIDEO_ID ? DEMO_TRANSCRIPT : videoRecord?.transcript) ||
+        [];
+      if (Array.isArray(segments) && segments.length) {
+        transcriptContext = segments
+          .slice(0, 12)
+          .map((segment: { start: number; text: string }) => {
+            const mins = Math.floor(segment.start / 60);
+            const secs = Math.floor(segment.start % 60);
+            return `[${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}] ${segment.text}`;
+          })
+          .join('\n');
+      }
+
+      const questionCategory = categorizeQuestion(question, transcriptContext || question);
+      const tutorInstructions = createBrilliantSystemPrompt(
+        question,
+        transcriptContext || 'Use the linked YouTube tutorial as your primary source.',
+        questionCategory,
+      );
+
+      const authUser = await getUser();
+      if (authUser?.id && videoId) {
+        await recordLearningEvent({
+          ownerClerkId: authUser.id,
+          type: 'chat.message',
+          externalVideoId: videoId,
+          payload: { provider: 'gemini-youtube', questionLength: question.length },
+        });
+      }
+
+      try {
+        const { content } = await askPyeYoutube({
+          youtubeUrl,
+          question,
+          tutorInstructions,
+          transcriptContext: transcriptContext || undefined,
+          userId: authUser?.id,
+        });
+        if (redis) {
+          try {
+            await redis.setex(cacheKey, CHAT_TTL_SECONDS, content);
+            await recordQuestion(redis, videoId, question);
+          } catch { /* ignore cache errors */ }
+        } else {
+          memory.set(cacheKey, { data: content, ts: Date.now() });
+        }
+        return streamResponse(content);
+      } catch (error) {
+        logger.warn('Gemini YouTube chat failed; falling back to transcript chat if available', {
+          videoId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        if (!transcriptContext) {
+          return NextResponse.json(
+            { error: 'Pye could not reach the YouTube tutor service. Please try again shortly.' },
+            { status: 503 },
+          );
+        }
+      }
+    }
+
     // Resolve transcript from request body, demo data, or Aurora/Mongo video record
     let transcriptToUse =
       transcript || (videoId === DEMO_VIDEO_ID ? DEMO_TRANSCRIPT : null);
 
     if (!transcriptToUse && videoId) {
-      const videoRecord = await findVideoByExternalId(videoId);
-      if (videoRecord?.transcript?.length) {
+      if (!videoRecord) {
+        const loaded = await findVideoByExternalId(videoId);
+        if (loaded?.transcript?.length) {
+          transcriptToUse = loaded.transcript;
+        }
+      } else if (videoRecord.transcript?.length) {
         transcriptToUse = videoRecord.transcript;
       }
     }
@@ -544,10 +627,10 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Gemini is the launch provider for video chat. It is fast, understands the
-    // transcript context and keeps a Bedrock quota issue from taking down the
-    // learner experience. Bedrock remains an opt-in enterprise fallback.
-    const useBedrock = process.env.CHAT_PROVIDER === 'bedrock' && Boolean(bedrockClient)
+    // Paid custom uploads use Bedrock RAG. YouTube is handled above via Gemini URL chat.
+    const useBedrock =
+      chatStrategy === 'bedrock-upload' ||
+      (process.env.CHAT_PROVIDER === 'bedrock' && Boolean(bedrockClient));
     if (!useBedrock) {
       const responseText = await generateGeminiChatResponse(prompt, question, relevantSegments)
       if (redis) { try { await redis.setex(cacheKey, CHAT_TTL_SECONDS, responseText); await recordQuestion(redis, videoId, question) } catch { } }
